@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   analyze,
   analyzeComps,
+  arvForSource,
   assumptionWarnings,
   compareArv,
   CONSERVATIVE_TIP,
@@ -14,10 +15,12 @@ import {
   MAX_COMPS,
   sensitivity,
   summarize,
+  type ArvSource,
   type Comp,
   type CostMode,
   type Inputs,
   type Level,
+  type Property,
   type PurchaseType,
   type Recommendation,
   type Subject,
@@ -29,15 +32,28 @@ import {
   PhaseCard,
   Pill,
   ReadOut,
-  Segmented,
   Stars,
   type Tone,
 } from "@/components/ui";
 import { Timeline, type TimelineStep } from "@/components/Timeline";
 import { Sensitivity } from "@/components/Sensitivity";
 import { CompAnalyzer } from "@/components/CompAnalyzer";
+import { PropertyHeader } from "@/components/PropertyHeader";
+import { QuickSummary, type SummaryItem } from "@/components/QuickSummary";
+import {
+  DealChecklist,
+  type CheckStatus,
+  type ChecklistItem,
+} from "@/components/DealChecklist";
+import { ArvSourceCard } from "@/components/ArvSourceCard";
 
-type ArvMode = "manual" | "comp";
+const ARV_SOURCES: ArvSource[] = [
+  "manual",
+  "comp",
+  "conservative",
+  "average",
+  "aggressive",
+];
 
 /* ------------------------------ deal state -------------------------------- */
 
@@ -81,6 +97,38 @@ const STORAGE_KEY = "brrrr-deal-v1";
 const EMPTY_SUBJECT: Subject = { sqft: null, beds: null, baths: null };
 const EXAMPLE_SUBJECT: Subject = { sqft: 1400, beds: 3, baths: 2 };
 
+const EMPTY_PROPERTY: Property = {
+  name: "",
+  address: "",
+  cityState: "",
+  beds: null,
+  baths: null,
+  sqft: null,
+};
+const EXAMPLE_PROPERTY: Property = {
+  name: "Maple Street Rental",
+  address: "742 Maple St",
+  cityState: "Springfield, IL",
+  beds: 3,
+  baths: 2,
+  sqft: 1400,
+};
+
+function sanitizeProperty(x: unknown): Property {
+  if (!x || typeof x !== "object") return { ...EMPTY_PROPERTY };
+  const o = x as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
+  return {
+    name: str(o.name),
+    address: str(o.address),
+    cityState: str(o.cityState),
+    beds: num(o.beds),
+    baths: num(o.baths),
+    sqft: num(o.sqft),
+  };
+}
+
 function genId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -99,15 +147,17 @@ function newComp(): Comp {
     distance: null,
     daysSinceSale: null,
     reno: "Similar",
+    included: true,
+    notes: "",
   };
 }
 
 const EXAMPLE_COMPS: Comp[] = [
-  { id: "ex1", address: "123 Oak St", salePrice: 215000, sqft: 1450, beds: 3, baths: 2, distance: 0.4, daysSinceSale: 35, reno: "Similar" },
-  { id: "ex2", address: "456 Maple Ave", salePrice: 199000, sqft: 1350, beds: 3, baths: 2, distance: 0.7, daysSinceSale: 60, reno: "Similar" },
-  { id: "ex3", address: "789 Pine Rd", salePrice: 228000, sqft: 1500, beds: 4, baths: 2, distance: 1.1, daysSinceSale: 90, reno: "Superior" },
-  { id: "ex4", address: "321 Elm St", salePrice: 192000, sqft: 1300, beds: 3, baths: 1.5, distance: 0.9, daysSinceSale: 120, reno: "Basic" },
-  { id: "ex5", address: "654 Birch Ln", salePrice: 221000, sqft: 1480, beds: 3, baths: 2.5, distance: 1.5, daysSinceSale: 150, reno: "Similar" },
+  { id: "ex1", address: "123 Oak St", salePrice: 215000, sqft: 1450, beds: 3, baths: 2, distance: 0.4, daysSinceSale: 35, reno: "Similar", included: true, notes: "" },
+  { id: "ex2", address: "456 Maple Ave", salePrice: 199000, sqft: 1350, beds: 3, baths: 2, distance: 0.7, daysSinceSale: 60, reno: "Similar", included: true, notes: "" },
+  { id: "ex3", address: "789 Pine Rd", salePrice: 228000, sqft: 1500, beds: 4, baths: 2, distance: 1.1, daysSinceSale: 90, reno: "Superior", included: true, notes: "Larger, higher-end finishes" },
+  { id: "ex4", address: "321 Elm St", salePrice: 192000, sqft: 1300, beds: 3, baths: 1.5, distance: 0.9, daysSinceSale: 120, reno: "Basic", included: true, notes: "" },
+  { id: "ex5", address: "654 Birch Ln", salePrice: 221000, sqft: 1480, beds: 3, baths: 2.5, distance: 1.5, daysSinceSale: 150, reno: "Similar", included: true, notes: "" },
 ];
 
 /** Coerce an unknown value loaded from storage into a Comp (or null). */
@@ -127,6 +177,8 @@ function sanitizeComp(x: unknown): Comp | null {
     distance: num(o.distance),
     daysSinceSale: num(o.daysSinceSale),
     reno,
+    included: o.included !== false, // default to included
+    notes: typeof o.notes === "string" ? o.notes : "",
   };
 }
 
@@ -165,6 +217,14 @@ const dscrTone = (v: number): Tone =>
   !isFinite(v) || v >= 1.25 ? "good" : v >= 1.05 ? "warn" : "bad";
 const cashLeftTone = (v: number): Tone =>
   v <= 0 ? "good" : v <= 10000 ? "warn" : "bad";
+const recTextTone = (rec: Recommendation): Tone =>
+  rec === "Buy" ? "good" : rec === "Buy with Caution" ? "warn" : "bad";
+
+const threeWay = (
+  status: CheckStatus,
+  label: string,
+  detail: string,
+): ChecklistItem => ({ status, label, detail });
 
 /* --------------------------------- page ----------------------------------- */
 
@@ -177,7 +237,8 @@ export default function Home() {
   const [holdingMode, setHoldingMode] = useState<CostMode>("dollar");
   const [subject, setSubject] = useState<Subject>(EMPTY_SUBJECT);
   const [comps, setComps] = useState<Comp[]>([]);
-  const [arvMode, setArvMode] = useState<ArvMode>("manual");
+  const [arvMode, setArvMode] = useState<ArvSource>("manual");
+  const [property, setProperty] = useState<Property>(EMPTY_PROPERTY);
   const [pendingResume, setPendingResume] = useState(false);
   const [ready, setReady] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -188,7 +249,8 @@ export default function Home() {
     holdingMode: CostMode;
     subject: Subject;
     comps: Comp[];
-    arvMode: ArvMode;
+    arvMode: ArvSource;
+    property: Property;
   } | null>(null);
 
   // Load any saved deal once, on mount (client only — avoids hydration issues)
@@ -214,7 +276,8 @@ export default function Home() {
               .map(sanitizeComp)
               .filter((c: Comp | null): c is Comp => c !== null)
               .slice(0, MAX_COMPS),
-            arvMode: p.arvMode === "comp" ? "comp" : "manual",
+            arvMode: ARV_SOURCES.includes(p.arvMode) ? p.arvMode : "manual",
+            property: sanitizeProperty(p.property),
           };
           setPendingResume(true);
         }
@@ -241,6 +304,7 @@ export default function Home() {
             subject,
             comps,
             arvMode,
+            property,
             savedAt: t,
           }),
         );
@@ -258,6 +322,7 @@ export default function Home() {
     subject,
     comps,
     arvMode,
+    property,
     ready,
     pendingResume,
   ]);
@@ -268,15 +333,13 @@ export default function Home() {
     [subject, comps],
   );
   const manualArv = values.arv ?? 0;
-  // When comp-based mode is on (and we have an estimate) use the comp average;
-  // otherwise fall back to the manually entered ARV.
-  const effectiveArv =
-    arvMode === "comp" && compAnalysis.averageARV > 0
-      ? compAnalysis.averageARV
-      : manualArv;
-  const arvVerdict = useMemo(
-    () => compareArv(manualArv, compAnalysis.averageARV),
-    [manualArv, compAnalysis.averageARV],
+  const compArv = compAnalysis.averageARV;
+  // Only the selected source feeds the refinance math (combined sources fall
+  // back to manual when no comp estimate exists).
+  const effectiveArv = arvForSource(arvMode, manualArv, compArv);
+  const arvComparison = useMemo(
+    () => compareArv(manualArv, compArv),
+    [manualArv, compArv],
   );
 
   // Calculations run only when committed values change (Enter / blur / load)
@@ -330,6 +393,16 @@ export default function Home() {
   const updateSubject = (key: keyof Subject, v: number | null) =>
     setSubject((prev) => ({ ...prev, [key]: v }));
 
+  // Property metadata editing
+  const updatePropertyText = (
+    key: "name" | "address" | "cityState",
+    v: string,
+  ) => setProperty((prev) => ({ ...prev, [key]: v }));
+  const updatePropertyNum = (
+    key: "beds" | "baths" | "sqft",
+    v: number | null,
+  ) => setProperty((prev) => ({ ...prev, [key]: v }));
+
   const loadExample = () => {
     setValues(EXAMPLE_VALUES);
     setPurchaseType(defaultInputs.purchaseType);
@@ -338,6 +411,7 @@ export default function Home() {
     setSubject(EXAMPLE_SUBJECT);
     setComps(EXAMPLE_COMPS.map((c) => ({ ...c })));
     setArvMode("manual");
+    setProperty({ ...EXAMPLE_PROPERTY });
     setPendingResume(false);
   };
   const clearDeal = () => {
@@ -347,6 +421,7 @@ export default function Home() {
     setSubject(EMPTY_SUBJECT);
     setComps([]);
     setArvMode("manual");
+    setProperty({ ...EMPTY_PROPERTY });
     setPendingResume(false);
   };
   const resume = () => {
@@ -358,6 +433,7 @@ export default function Home() {
       setSubject(savedRef.current.subject);
       setComps(savedRef.current.comps);
       setArvMode(savedRef.current.arvMode);
+      setProperty(savedRef.current.property);
     }
     setPendingResume(false);
   };
@@ -368,6 +444,7 @@ export default function Home() {
     setSubject(EMPTY_SUBJECT);
     setComps([]);
     setArvMode("manual");
+    setProperty({ ...EMPTY_PROPERTY });
     setPendingResume(false);
   };
 
@@ -420,6 +497,129 @@ export default function Home() {
   ];
 
   const financed = purchaseType === "financed";
+
+  // First-screen quick summary
+  const capitalRow: SummaryItem =
+    r.cashOutSurplus > 0
+      ? {
+          label: "Cash Out Surplus",
+          value: D(fmtUSD(r.cashOutSurplus)),
+          tone: "good",
+        }
+      : {
+          label: "Cash Left in Deal",
+          value: D(fmtUSD(r.cashLeftInDeal)),
+          tone: hasDeal ? cashLeftTone(r.cashLeftInDeal) : "neutral",
+        };
+  const quickItems: SummaryItem[] = [
+    { label: "Purchase Price", value: D(fmtUSD(inputs.purchasePrice)) },
+    { label: "Rehab Cost", value: D(fmtUSD(inputs.rehabCosts)) },
+    { label: "ARV", value: D(fmtUSD(inputs.arv)) },
+    { label: "Monthly Rent", value: D(fmtUSD(inputs.monthlyRent)) },
+    { label: "Cash Invested", value: D(fmtUSD(r.cashInvested)) },
+    {
+      label: "Capital Recovered",
+      value: D(fmtUSD(r.capitalRecovered)),
+      tone: hasDeal ? "good" : "neutral",
+    },
+    capitalRow,
+    {
+      label: "Monthly Cash Flow",
+      value: D(fmtUSD(r.monthlyCashFlow)),
+      tone: hasDeal ? cfTone(r.monthlyCashFlow) : "neutral",
+    },
+    {
+      label: "DSCR",
+      value: D(fmtNum(r.dscr)),
+      tone: hasDeal ? dscrTone(r.dscr) : "neutral",
+    },
+    {
+      label: "Recommendation",
+      value: hasDeal ? s.recommendation : "—",
+      tone: hasDeal ? recTextTone(s.recommendation) : "neutral",
+    },
+  ];
+
+  // Deal checklist — reads existing computed values only
+  const rentEntered = inputs.monthlyRent > 0;
+  const checklist: ChecklistItem[] = [
+    threeWay(
+      inputs.purchasePrice > 0 && r.maxOffer70 > 0
+        ? inputs.purchasePrice <= r.maxOffer70
+          ? "good"
+          : inputs.purchasePrice <= r.maxOffer70 * 1.05
+            ? "warn"
+            : "bad"
+        : "warn",
+      "Meets the 70% rule",
+      `Max offer is ${fmtUSD(r.maxOffer70)}; purchase price is ${fmtUSD(inputs.purchasePrice)}.`,
+    ),
+    threeWay(
+      r.monthlyCashFlow >= 100 ? "good" : r.monthlyCashFlow >= 0 ? "warn" : "bad",
+      "Positive monthly cash flow",
+      `${fmtUSD(r.monthlyCashFlow)}/mo after expenses and the new mortgage.`,
+    ),
+    threeWay(
+      !isFinite(r.dscr) || r.dscr >= 1.2 ? "good" : r.dscr >= 1.05 ? "warn" : "bad",
+      "DSCR above 1.20",
+      `DSCR is ${fmtNum(r.dscr)} (lenders typically want 1.20+).`,
+    ),
+    threeWay(
+      !isFinite(r.brrrrPct) || r.brrrrPct >= 90
+        ? "good"
+        : r.brrrrPct >= 70
+          ? "warn"
+          : "bad",
+      "At least 90% capital recovery",
+      `Refinance recovers ${fmtPct(r.brrrrPct, 0)} of invested cash.`,
+    ),
+    threeWay(
+      compAnalysis.validCount === 0
+        ? "warn"
+        : compAnalysis.confidence === "High"
+          ? "good"
+          : compAnalysis.confidence === "Medium"
+            ? "warn"
+            : "bad",
+      "ARV confidence medium or high",
+      compAnalysis.validCount === 0
+        ? "No comps added yet — confidence can't be assessed."
+        : `Comp-based ARV confidence is ${compAnalysis.confidence}.`,
+    ),
+    threeWay(
+      !rentEntered
+        ? "warn"
+        : r.breakEvenRent <= inputs.monthlyRent
+          ? "good"
+          : r.breakEvenRent <= inputs.monthlyRent * 1.05
+            ? "warn"
+            : "bad",
+      "Break-even rent below expected rent",
+      rentEntered
+        ? `Break-even is ${fmtUSD(r.breakEvenRent)}; expected rent is ${fmtUSD(inputs.monthlyRent)}.`
+        : "Enter expected rent to evaluate.",
+    ),
+    threeWay(
+      !rentEntered
+        ? "warn"
+        : r.rentForDSCR120 <= inputs.monthlyRent
+          ? "good"
+          : r.rentForDSCR120 <= inputs.monthlyRent * 1.05
+            ? "warn"
+            : "bad",
+      "Rent for DSCR 1.20 below expected rent",
+      rentEntered
+        ? `Need ${fmtUSD(r.rentForDSCR120)} for a 1.20 DSCR; expected rent is ${fmtUSD(inputs.monthlyRent)}.`
+        : "Enter expected rent to evaluate.",
+    ),
+    threeWay(
+      warnings.length === 0 ? "good" : warnings.length <= 2 ? "warn" : "bad",
+      "Assumptions are conservative enough",
+      warnings.length === 0
+        ? "Management, maintenance, and reserves look reasonable."
+        : `${warnings.length} optimistic assumption${warnings.length === 1 ? "" : "s"} flagged.`,
+    ),
+  ];
 
   return (
     <div className="min-h-screen">
@@ -560,6 +760,24 @@ export default function Home() {
           </div>
         </header>
 
+        {/* ----------------- Property header + quick summary ---------------- */}
+        <div className="mb-6 space-y-6">
+          <PropertyHeader
+            property={property}
+            onText={updatePropertyText}
+            onNum={updatePropertyNum}
+            recommendation={s.recommendation}
+            stars={s.stars}
+            hasDeal={hasDeal}
+            lastUpdated={savedAt}
+          />
+          <QuickSummary
+            items={quickItems}
+            recommendation={s.recommendation}
+            hasDeal={hasDeal}
+          />
+        </div>
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_1fr]">
           {/* =========================== INPUTS =========================== */}
           <div className="space-y-6">
@@ -686,51 +904,17 @@ export default function Home() {
               accent="bg-violet-600"
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* ARV source toggle */}
+                {/* ARV source card — selection, comparison, transparency */}
                 <div className="sm:col-span-2">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
-                    ARV Source
-                  </span>
-                  <Segmented<ArvMode>
-                    value={arvMode}
+                  <ArvSourceCard
+                    manualArv={manualArv}
+                    compArv={compArv}
+                    confidence={compAnalysis.confidence}
+                    comparison={arvComparison}
+                    source={arvMode}
                     onChange={setArvMode}
-                    options={[
-                      { value: "manual", label: "Use Manual ARV" },
-                      { value: "comp", label: "Use Comp-based ARV" },
-                    ]}
+                    effectiveArv={effectiveArv}
                   />
-                  {arvMode === "comp" ? (
-                    <p className="mt-1.5 text-xs text-slate-500">
-                      {compAnalysis.averageARV > 0 ? (
-                        <>
-                          Refinance is using the comp-based ARV of{" "}
-                          <span className="font-semibold text-sky-700">
-                            {fmtUSD(compAnalysis.averageARV)}
-                          </span>
-                          .
-                        </>
-                      ) : (
-                        "No comp estimate yet — add comps below. Until then, the manual ARV is used."
-                      )}
-                    </p>
-                  ) : (
-                    arvVerdict && (
-                      <p
-                        className={`mt-1.5 text-xs font-medium ${
-                          arvVerdict.tone === "good"
-                            ? "text-emerald-600"
-                            : arvVerdict.tone === "warn"
-                              ? "text-amber-600"
-                              : "text-sky-600"
-                        }`}
-                      >
-                        {arvVerdict.message}{" "}
-                        <span className="font-normal text-slate-400">
-                          (comp avg {fmtUSD(compAnalysis.averageARV)})
-                        </span>
-                      </p>
-                    )
-                  )}
                 </div>
                 <Field
                   label="Manual ARV"
@@ -742,7 +926,7 @@ export default function Home() {
                 <ReadOut
                   label="ARV Used"
                   value={D(fmtUSD(inputs.arv))}
-                  hint={arvMode === "comp" ? "comp-based" : "manual"}
+                  hint={arvMode}
                   tone="neutral"
                 />
                 <Field
@@ -821,6 +1005,7 @@ export default function Home() {
               subject={subject}
               onSubject={updateSubject}
               comps={comps}
+              results={compAnalysis}
               onUpdate={updateComp}
               onAdd={addComp}
               onRemove={removeComp}
@@ -998,6 +1183,9 @@ export default function Home() {
                     />
                   </div>
                 </section>
+
+                {/* Deal checklist */}
+                <DealChecklist items={checklist} />
 
                 {/* Assumption warnings */}
                 {warnings.length > 0 && <AssumptionWarnings items={warnings} />}

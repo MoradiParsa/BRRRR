@@ -737,6 +737,8 @@ export type Comp = {
   distance: number | null; // miles from subject
   daysSinceSale: number | null;
   reno: RenoQuality;
+  included: boolean; // excluded comps stay visible but don't affect calcs
+  notes: string;
 };
 
 export type Subject = {
@@ -745,8 +747,19 @@ export type Subject = {
   baths: number | null;
 };
 
+/** Descriptive metadata for the property being analyzed (no calculations). */
+export type Property = {
+  name: string;
+  address: string;
+  cityState: string;
+  beds: number | null;
+  baths: number | null;
+  sqft: number | null;
+};
+
 export type CompResult = {
-  valid: boolean;
+  valid: boolean; // included AND has price + sqft → used in calc
+  hasData: boolean; // has price + sqft (regardless of inclusion)
   pricePerSqft: number; // raw sale price / sqft
   similarity: number; // 0–100
   weight: number; // 0–1 (valid comps sum to 1)
@@ -755,11 +768,16 @@ export type CompResult = {
 
 export type CompAnalysis = {
   rows: CompResult[]; // aligned with the input comps
-  validCount: number;
+  validCount: number; // comps actually used in the estimate
+  includedCount: number; // comps toggled "included"
+  excludedCount: number; // comps toggled "excluded"
   weightedPpsf: number; // reno-adjusted, weighted
   conservativeARV: number;
   averageARV: number;
   aggressiveARV: number;
+  recommendedARV: number;
+  recommendedBasis: "Average" | "Conservative" | "None";
+  recommendedReason: string;
   confidence: Level;
 };
 
@@ -775,11 +793,19 @@ export function analyzeComps(subject: Subject, comps: Comp[]): CompAnalysis {
   const sSqft = subject.sqft ?? 0;
 
   const rows: CompResult[] = comps.map((c) => {
-    const valid = (c.salePrice ?? 0) > 0 && (c.sqft ?? 0) > 0;
-    const pricePerSqft = valid
+    const hasData = (c.salePrice ?? 0) > 0 && (c.sqft ?? 0) > 0;
+    const valid = hasData && c.included;
+    const pricePerSqft = hasData
       ? (c.salePrice as number) / (c.sqft as number)
       : 0;
-    return { valid, pricePerSqft, similarity: 0, weight: 0, impliedARV: 0 };
+    return {
+      valid,
+      hasData,
+      pricePerSqft,
+      similarity: 0,
+      weight: 0,
+      impliedARV: 0,
+    };
   });
 
   const valids = comps
@@ -840,33 +866,125 @@ export function analyzeComps(subject: Subject, comps: Comp[]): CompAnalysis {
   else if (n < 3 || cv > 0.2 || avgSim < 45) confidence = "Low";
   else confidence = "Medium";
 
+  const includedCount = comps.filter((c) => c.included).length;
+  const excludedCount = comps.length - includedCount;
+
+  // Recommend an ARV and explain why.
+  let recommendedARV = 0;
+  let recommendedBasis: "Average" | "Conservative" | "None" = "None";
+  let recommendedReason = "Add the subject square footage and at least one included comp to get a recommendation.";
+  if (n > 0 && sSqft > 0) {
+    if (confidence === "Low") {
+      recommendedARV = conservativeARV;
+      recommendedBasis = "Conservative";
+      recommendedReason = `Confidence is low (${n} comp${n === 1 ? "" : "s"}, with a wide spread or weak similarity), so the conservative estimate is recommended to avoid overvaluing.`;
+    } else {
+      recommendedARV = averageARV;
+      recommendedBasis = "Average";
+      recommendedReason = `${confidence} confidence across ${n} consistent comp${n === 1 ? "" : "s"}, so the similarity-weighted average is the most reliable estimate.`;
+    }
+  }
+
   return {
     rows,
     validCount: n,
+    includedCount,
+    excludedCount,
     weightedPpsf,
     conservativeARV,
     averageARV,
     aggressiveARV,
+    recommendedARV,
+    recommendedBasis,
+    recommendedReason,
     confidence,
   };
 }
 
-export type ArvVerdict = {
+export type ArvComparison = {
+  pctDiff: number; // signed (manual − comp) / comp × 100
+  dollarDiff: number; // signed manual − comp
+  tone: "good" | "warn";
   message: string;
-  tone: "good" | "warn" | "neutral";
 };
 
-/** Compare a manually entered ARV against the comp-derived average. */
+/** Compare a manually entered ARV against the comp-derived ARV. */
 export function compareArv(
   manualArv: number,
   compArv: number,
-): ArvVerdict | null {
+): ArvComparison | null {
   if (manualArv <= 0 || compArv <= 0) return null;
-  const diff = (manualArv - compArv) / compArv;
-  if (diff > 0.1) return { message: "Manual ARV may be optimistic.", tone: "warn" };
-  if (diff < -0.1)
-    return { message: "Manual ARV may be conservative.", tone: "neutral" };
-  return { message: "Manual ARV appears reasonable.", tone: "good" };
+  const dollarDiff = manualArv - compArv;
+  const pctDiff = (dollarDiff / compArv) * 100;
+  const abs = Math.abs(pctDiff);
+  if (abs <= 5) {
+    return {
+      pctDiff,
+      dollarDiff,
+      tone: "good",
+      message: "Manual ARV appears well supported.",
+    };
+  }
+  if (abs <= 10) {
+    return {
+      pctDiff,
+      dollarDiff,
+      tone: "warn",
+      message: "Manual ARV is slightly different than comparable sales.",
+    };
+  }
+  return {
+    pctDiff,
+    dollarDiff,
+    tone: "warn",
+    message:
+      dollarDiff > 0
+        ? "Manual ARV may be optimistic."
+        : "Manual ARV may be conservative.",
+  };
+}
+
+/** Which ARV value feeds every downstream refinance calculation. */
+export type ArvSource =
+  | "manual"
+  | "comp"
+  | "conservative"
+  | "average"
+  | "aggressive";
+
+/** Resolve the ARV that the selected source implies. Combined sources fall
+ *  back gracefully when one input is missing. */
+export function arvForSource(
+  source: ArvSource,
+  manualArv: number,
+  compArv: number,
+): number {
+  const haveComp = compArv > 0;
+  const haveManual = manualArv > 0;
+  switch (source) {
+    case "manual":
+      return manualArv;
+    case "comp":
+      return haveComp ? compArv : manualArv;
+    case "conservative":
+      return haveComp && haveManual
+        ? Math.min(manualArv, compArv)
+        : haveComp
+          ? compArv
+          : manualArv;
+    case "average":
+      return haveComp && haveManual
+        ? (manualArv + compArv) / 2
+        : haveComp
+          ? compArv
+          : manualArv;
+    case "aggressive":
+      return haveComp && haveManual
+        ? Math.max(manualArv, compArv)
+        : haveComp
+          ? compArv
+          : manualArv;
+  }
 }
 
 /* --------------------------------- format --------------------------------- */

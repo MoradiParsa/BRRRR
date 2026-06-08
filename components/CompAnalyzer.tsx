@@ -1,10 +1,10 @@
 "use client";
 
 import {
-  analyzeComps,
   fmtUSD,
   MAX_COMPS,
   type Comp,
+  type CompAnalysis,
   type RenoQuality,
   type Subject,
 } from "@/lib/brrrr";
@@ -28,6 +28,7 @@ export function CompAnalyzer({
   subject,
   onSubject,
   comps,
+  results,
   onUpdate,
   onAdd,
   onRemove,
@@ -35,11 +36,11 @@ export function CompAnalyzer({
   subject: Subject;
   onSubject: (key: keyof Subject, v: number | null) => void;
   comps: Comp[];
+  results: CompAnalysis;
   onUpdate: (id: string, patch: Partial<Comp>) => void;
   onAdd: () => void;
   onRemove: (id: string) => void;
 }) {
-  const results = analyzeComps(subject, comps);
   const canEstimate = results.validCount > 0 && (subject.sqft ?? 0) > 0;
 
   const confTone =
@@ -120,10 +121,32 @@ export function CompAnalyzer({
                 return (
                   <div
                     key={c.id}
-                    className="rounded-xl border border-slate-200 bg-slate-50/60 p-3"
+                    className={`rounded-xl border p-3 transition ${
+                      c.included
+                        ? "border-slate-200 bg-slate-50/60"
+                        : "border-slate-200 bg-slate-100/70"
+                    }`}
                   >
                     <div className="mb-2 flex items-center gap-2">
-                      <div className="flex-1">
+                      <button
+                        type="button"
+                        onClick={() => onUpdate(c.id, { included: !c.included })}
+                        aria-pressed={c.included}
+                        aria-label={c.included ? "Exclude comp" : "Include comp"}
+                        className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+                          c.included
+                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                            : "bg-slate-200 text-slate-500 hover:bg-slate-300"
+                        }`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            c.included ? "bg-emerald-500" : "bg-slate-400"
+                          }`}
+                        />
+                        {c.included ? "Included" : "Excluded"}
+                      </button>
+                      <div className={`flex-1 ${c.included ? "" : "opacity-60"}`}>
                         <TextField
                           value={c.address}
                           placeholder={`Comp ${idx + 1} address`}
@@ -151,7 +174,11 @@ export function CompAnalyzer({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                    <div
+                      className={`grid grid-cols-2 gap-2.5 sm:grid-cols-3 ${
+                        c.included ? "" : "opacity-60"
+                      }`}
+                    >
                       <Field
                         label="Sale Price"
                         kind="currency"
@@ -196,24 +223,44 @@ export function CompAnalyzer({
                       />
                     </div>
 
-                    <div className="mt-2.5">
-                      <span className="mb-1 block text-xs font-medium text-slate-600">
-                        Renovation quality
-                      </span>
-                      <Segmented<RenoQuality>
-                        value={c.reno}
-                        options={RENO_OPTIONS}
-                        onChange={(v) => onUpdate(c.id, { reno: v })}
-                        size="sm"
+                    <div
+                      className={`mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 ${
+                        c.included ? "" : "opacity-60"
+                      }`}
+                    >
+                      <div>
+                        <span className="mb-1 block text-xs font-medium text-slate-600">
+                          Renovation quality
+                        </span>
+                        <Segmented<RenoQuality>
+                          value={c.reno}
+                          options={RENO_OPTIONS}
+                          onChange={(v) => onUpdate(c.id, { reno: v })}
+                          size="sm"
+                        />
+                      </div>
+                      <TextField
+                        label="Notes"
+                        value={c.notes}
+                        placeholder="e.g. corner lot, updated kitchen"
+                        onChange={(v) => onUpdate(c.id, { notes: v })}
                       />
                     </div>
 
-                    {row?.valid ? (
+                    {row?.hasData ? (
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
                         <Chip>{fmtUSD(row.pricePerSqft)}/sqft</Chip>
-                        <Chip>Similarity {row.similarity}</Chip>
-                        <Chip>Weight {(row.weight * 100).toFixed(0)}%</Chip>
-                        <Chip>≈ {fmtUSD(row.impliedARV)}</Chip>
+                        {c.included ? (
+                          <>
+                            <Chip>Similarity {row.similarity}</Chip>
+                            <Chip>Weight {(row.weight * 100).toFixed(0)}%</Chip>
+                            <Chip>≈ {fmtUSD(row.impliedARV)}</Chip>
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center rounded-md bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500">
+                            Excluded · weight 0%
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <p className="mt-2.5 text-xs text-slate-400">
@@ -273,8 +320,61 @@ export function CompAnalyzer({
             </p>
           )}
         </div>
+
+        {/* ARV Audit */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              ARV Audit
+            </h3>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${confTone}`}
+            >
+              {results.confidence} confidence
+            </span>
+          </div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+            <AuditRow label="Included Comps" value={String(results.includedCount)} />
+            <AuditRow label="Excluded Comps" value={String(results.excludedCount)} />
+            <AuditRow label="Comps Used" value={String(results.validCount)} />
+            <AuditRow label="Conservative ARV" value={fmtUSD(results.conservativeARV)} />
+            <AuditRow label="Average ARV" value={fmtUSD(results.averageARV)} />
+            <AuditRow label="Aggressive ARV" value={fmtUSD(results.aggressiveARV)} />
+          </dl>
+          <div className="mt-3 rounded-lg bg-slate-50 p-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Recommended ARV
+              </span>
+              <span className="text-lg font-bold text-slate-900">
+                {results.recommendedBasis === "None"
+                  ? "—"
+                  : fmtUSD(results.recommendedARV)}
+                {results.recommendedBasis !== "None" && (
+                  <span className="ml-1 text-xs font-medium text-slate-400">
+                    ({results.recommendedBasis})
+                  </span>
+                )}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              {results.recommendedReason}
+            </p>
+          </div>
+        </div>
       </div>
     </PhaseCard>
+  );
+}
+
+function AuditRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </dt>
+      <dd className="text-sm font-semibold text-slate-800">{value}</dd>
+    </div>
   );
 }
 
