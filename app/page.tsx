@@ -36,7 +36,7 @@ type NavItem = { key: View; label: string; icon: ReactNode };
 
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: <IconGrid /> },
-  { key: "import", label: "Import Property", icon: <IconImport /> },
+  { key: "import", label: "Add Property", icon: <IconImport /> },
   { key: "saved", label: "Saved Deals", icon: <IconStack /> },
   { key: "compare", label: "Compare Deals", icon: <IconCompare /> },
   { key: "portfolio", label: "Portfolio", icon: <IconChart /> },
