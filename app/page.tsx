@@ -1,77 +1,120 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   duplicateDeal as makeDuplicate,
   emptyDealState,
   loadDeals,
   makeSavedDeal,
   saveDeals,
+  toDealState,
   type DealState,
   type SavedDeal,
 } from "@/lib/deals";
-import { Dashboard } from "@/components/Dashboard";
-import { Analyzer } from "@/components/Analyzer";
+import { DashboardHome } from "@/components/DashboardHome";
+import { SavedDeals } from "@/components/SavedDeals";
+import { Workspace, type WorkspaceHandle } from "@/components/Workspace";
 import { Compare } from "@/components/Compare";
 import { ComingSoon } from "@/components/ComingSoon";
 
-type View = "dashboard" | "analyzer" | "compare" | "portfolio" | "settings";
+type View = "dashboard" | "saved" | "compare" | "portfolio" | "settings";
 
 type NavItem = { key: View; label: string; icon: ReactNode };
 
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: <IconGrid /> },
-  { key: "analyzer", label: "Deal Analyzer", icon: <IconCalc /> },
+  { key: "saved", label: "Saved Deals", icon: <IconStack /> },
   { key: "compare", label: "Compare Deals", icon: <IconCompare /> },
   { key: "portfolio", label: "Portfolio", icon: <IconChart /> },
   { key: "settings", label: "Settings", icon: <IconGear /> },
 ];
 
+type WorkspaceInit = {
+  mode: "new" | "edit";
+  dealId: string | null;
+  deal: DealState;
+  savedAt: number | null;
+  returnView: View;
+};
+
 export default function Home() {
   const [deals, setDeals] = useState<SavedDeal[]>([]);
-  const [currentDealId, setCurrentDealId] = useState<string | null>(null);
   const [view, setView] = useState<View>("dashboard");
   const [ready, setReady] = useState(false);
 
-  // Load saved deals on mount (client only — keeps SSR/hydration consistent).
+  // Workspace (analyzer) — only active when creating or opening a deal.
+  const [workspace, setWorkspace] = useState<WorkspaceInit | null>(null);
+  const [workspaceKey, setWorkspaceKey] = useState(0);
+  const [workspaceDirty, setWorkspaceDirty] = useState(false);
+  const workspaceRef = useRef<WorkspaceHandle>(null);
+  const inWorkspace = workspace !== null;
+
+  // Unsaved-changes modal state.
+  const [pendingNav, setPendingNav] = useState<View | null>(null);
+
   useEffect(() => {
     setDeals(loadDeals());
     setReady(true);
   }, []);
 
-  const currentDeal = useMemo(
-    () => deals.find((d) => d.id === currentDealId) ?? null,
-    [deals, currentDealId],
-  );
+  /* ----------------------------- persistence ----------------------------- */
 
-  // Stable persister for the analyzer's autosave.
-  const persistDeal = useCallback(
-    (id: string, state: DealState, savedAt: number) => {
-      setDeals((prev) => {
-        const next = prev.map((d) =>
-          d.id === id ? { ...d, ...state, savedAt } : d,
-        );
-        saveDeals(next);
-        return next;
-      });
-    },
-    [],
-  );
-
-  const openDeal = (id: string) => {
-    setCurrentDealId(id);
-    setView("analyzer");
-  };
-
-  const newDeal = () => {
-    const deal = makeSavedDeal(emptyDealState());
+  const onPersistNew = useCallback((state: DealState): string => {
+    const deal = makeSavedDeal(state);
     setDeals((prev) => {
       const next = [deal, ...prev];
       saveDeals(next);
       return next;
     });
-    setCurrentDealId(deal.id);
-    setView("analyzer");
+    return deal.id;
+  }, []);
+
+  const onPersistExisting = useCallback((id: string, state: DealState) => {
+    setDeals((prev) => {
+      const next = prev.map((d) =>
+        d.id === id ? { ...d, ...state, savedAt: Date.now() } : d,
+      );
+      saveDeals(next);
+      return next;
+    });
+  }, []);
+
+  const onDirtyChange = useCallback((dirty: boolean) => {
+    setWorkspaceDirty(dirty);
+  }, []);
+
+  /* ------------------------------- opening ------------------------------- */
+
+  const openNew = () => {
+    setWorkspace({
+      mode: "new",
+      dealId: null,
+      deal: emptyDealState(),
+      savedAt: null,
+      returnView: view,
+    });
+    setWorkspaceKey((k) => k + 1);
+    setWorkspaceDirty(false);
+  };
+
+  const openEdit = (id: string) => {
+    const d = deals.find((x) => x.id === id);
+    if (!d) return;
+    setWorkspace({
+      mode: "edit",
+      dealId: id,
+      deal: toDealState(d),
+      savedAt: d.savedAt,
+      returnView: view === "compare" ? "compare" : view,
+    });
+    setWorkspaceKey((k) => k + 1);
+    setWorkspaceDirty(false);
   };
 
   const onDuplicate = (id: string) => {
@@ -90,45 +133,73 @@ export default function Home() {
       saveDeals(next);
       return next;
     });
-    if (currentDealId === id) {
-      setCurrentDealId(null);
-      setView("dashboard");
-    }
   };
 
-  const navigate = (next: View) => {
-    if (next === "analyzer") {
-      if (currentDeal) {
-        setView("analyzer");
-      } else if (deals.length > 0) {
-        const recent = [...deals].sort((a, b) => b.savedAt - a.savedAt)[0];
-        openDeal(recent.id);
-      } else {
-        newDeal();
-      }
+  /* ----------------------------- navigation ------------------------------ */
+
+  const leaveWorkspace = (target: View) => {
+    setWorkspace(null);
+    setWorkspaceDirty(false);
+    setView(target);
+  };
+
+  // Navigate, guarding unsaved workspace changes.
+  const requestNavigate = (target: View) => {
+    if (inWorkspace && workspaceDirty) {
+      setPendingNav(target);
       return;
     }
-    setView(next);
+    if (inWorkspace) {
+      leaveWorkspace(target);
+    } else {
+      setView(target);
+    }
   };
 
-  const activeNav: View = view;
+  const modalCancel = () => setPendingNav(null);
+  const modalDiscard = () => {
+    const target = pendingNav;
+    setPendingNav(null);
+    if (target) leaveWorkspace(target);
+  };
+  const modalSaveAndLeave = () => {
+    const target = pendingNav;
+    workspaceRef.current?.save();
+    setPendingNav(null);
+    if (target) leaveWorkspace(target);
+  };
+
+  /* ------------------------------- content ------------------------------- */
 
   let content: ReactNode = null;
   if (ready) {
-    if (view === "analyzer" && currentDeal) {
+    if (inWorkspace && workspace) {
       content = (
-        <Analyzer
-          key={currentDeal.id}
-          deal={currentDeal}
-          initialSavedAt={currentDeal.savedAt}
-          onPersist={(state, savedAt) =>
-            persistDeal(currentDeal.id, state, savedAt)
-          }
-          onBack={() => setView("dashboard")}
+        <Workspace
+          key={workspaceKey}
+          ref={workspaceRef}
+          deal={workspace.deal}
+          mode={workspace.mode}
+          dealId={workspace.dealId}
+          initialSavedAt={workspace.savedAt}
+          onPersistNew={onPersistNew}
+          onPersistExisting={onPersistExisting}
+          onDirtyChange={onDirtyChange}
+          onBack={() => requestNavigate(workspace.returnView)}
+        />
+      );
+    } else if (view === "saved") {
+      content = (
+        <SavedDeals
+          deals={deals}
+          onOpen={openEdit}
+          onNew={openNew}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
         />
       );
     } else if (view === "compare") {
-      content = <Compare deals={deals} onOpen={openDeal} />;
+      content = <Compare deals={deals} onOpen={openEdit} />;
     } else if (view === "portfolio") {
       content = (
         <ComingSoon
@@ -145,16 +216,17 @@ export default function Home() {
       );
     } else {
       content = (
-        <Dashboard
+        <DashboardHome
           deals={deals}
-          onOpen={openDeal}
-          onNew={newDeal}
-          onDuplicate={onDuplicate}
-          onDelete={onDelete}
+          onNew={openNew}
+          onOpen={openEdit}
+          onViewAll={() => requestNavigate("saved")}
         />
       );
     }
   }
+
+  const activeNav: View | null = inWorkspace ? null : view;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -166,7 +238,7 @@ export default function Home() {
             <button
               key={item.key}
               type="button"
-              onClick={() => navigate(item.key)}
+              onClick={() => requestNavigate(item.key)}
               className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
                 activeNav === item.key
                   ? "bg-indigo-50 text-indigo-700"
@@ -190,7 +262,7 @@ export default function Home() {
               <button
                 key={item.key}
                 type="button"
-                onClick={() => navigate(item.key)}
+                onClick={() => requestNavigate(item.key)}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                   activeNav === item.key
                     ? "bg-indigo-50 text-indigo-700"
@@ -215,6 +287,84 @@ export default function Home() {
 
         {/* Main content */}
         <div className="min-w-0 flex-1">{content}</div>
+      </div>
+
+      {/* Unsaved-changes modal */}
+      {pendingNav && (
+        <LeaveModal
+          onCancel={modalCancel}
+          onDiscard={modalDiscard}
+          onSave={modalSaveAndLeave}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------- leave modal ------------------------------ */
+
+function LeaveModal({
+  onCancel,
+  onDiscard,
+  onSave,
+}: {
+  onCancel: () => void;
+  onDiscard: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+            <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor">
+              <path
+                fillRule="evenodd"
+                d="M8.26 3.1c.77-1.33 2.71-1.33 3.48 0l6.28 10.86c.77 1.33-.2 3-1.74 3H3.72c-1.54 0-2.5-1.67-1.74-3L8.26 3.1zM10 7a1 1 0 00-1 1v3a1 1 0 102 0V8a1 1 0 00-1-1zm0 7a1 1 0 100 2 1 1 0 000-2z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </span>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              You have unsaved changes
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Save before leaving, or discard your changes?
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onDiscard}
+            className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+          >
+            Discard
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+          >
+            Save &amp; Leave
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -244,14 +394,11 @@ function IconGrid() {
     </svg>
   );
 }
-function IconCalc() {
+function IconStack() {
   return (
     <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor">
-      <path
-        fillRule="evenodd"
-        d="M5 2a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V4a2 2 0 00-2-2H5zm1 3h8v2H6V5zm0 4h2v2H6V9zm0 4h2v2H6v-2zm4-4h2v2h-2V9zm0 4h2v2h-2v-2zm4-4h2v6h-2V9z"
-        clipRule="evenodd"
-      />
+      <path d="M10 1l9 4-9 4-9-4 9-4z" />
+      <path d="M1 9l9 4 9-4M1 13l9 4 9-4" opacity="0.5" />
     </svg>
   );
 }

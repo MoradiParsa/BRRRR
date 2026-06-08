@@ -50,7 +50,7 @@ function recColor(rec: Recommendation): string {
       : "text-red-600";
 }
 
-export function Dashboard({
+export function SavedDeals({
   deals,
   onOpen,
   onNew,
@@ -108,7 +108,7 @@ export function Dashboard({
       {/* Greeting + new deal */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-indigo-600">Welcome back</p>
+          <p className="text-sm font-medium text-indigo-600">Your pipeline</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
             Saved Deals
           </h1>

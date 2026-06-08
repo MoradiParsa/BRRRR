@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   analyze,
   analyzeComps,
@@ -69,19 +76,50 @@ const threeWay = (
   detail: string,
 ): ChecklistItem => ({ status, label, detail });
 
-/* -------------------------------- analyzer -------------------------------- */
+/* -------------------------------- workspace ------------------------------- */
 
-export function Analyzer({
-  deal,
-  initialSavedAt,
-  onPersist,
-  onBack,
-}: {
+export type WorkspaceHandle = { save: () => void };
+
+/** Canonical serialization (array form sidesteps key-order issues). */
+function serializeDeal(st: DealState): string {
+  return JSON.stringify([
+    st.values,
+    st.purchaseType,
+    st.closingMode,
+    st.holdingMode,
+    st.subject,
+    st.comps,
+    st.arvMode,
+    st.property,
+    st.notes ?? "",
+  ]);
+}
+
+type WorkspaceProps = {
   deal: DealState;
+  mode: "new" | "edit";
+  dealId: string | null;
   initialSavedAt: number | null;
-  onPersist: (state: DealState, savedAt: number) => void;
+  onPersistNew: (state: DealState) => string;
+  onPersistExisting: (id: string, state: DealState) => void;
+  onDirtyChange: (dirty: boolean) => void;
   onBack: () => void;
-}) {
+};
+
+export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
+  function Workspace(
+    {
+      deal,
+      mode,
+      dealId,
+      initialSavedAt,
+      onPersistNew,
+      onPersistExisting,
+      onDirtyChange,
+      onBack,
+    },
+    ref,
+  ) {
   const [values, setValues] = useState<Values>(deal.values);
   const [purchaseType, setPurchaseType] = useState<PurchaseType>(
     deal.purchaseType,
@@ -92,9 +130,16 @@ export function Analyzer({
   const [comps, setComps] = useState<Comp[]>(deal.comps);
   const [arvMode, setArvMode] = useState<ArvSource>(deal.arvMode);
   const [property, setProperty] = useState<Property>(deal.property);
-  const [savedAt, setSavedAt] = useState<number | null>(initialSavedAt);
+  const [notes, setNotes] = useState<string>(deal.notes ?? "");
 
-  const buildState = (): DealState => ({
+  // ---- save / dirty tracking ----
+  const [persisted, setPersisted] = useState(mode === "edit");
+  const [internalId, setInternalId] = useState<string | null>(dealId);
+  const [baseline, setBaseline] = useState<string>(() => serializeDeal(deal));
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(initialSavedAt);
+  const [saving, setSaving] = useState(false);
+
+  const currentState: DealState = {
     values,
     purchaseType,
     closingMode,
@@ -103,44 +148,35 @@ export function Analyzer({
     comps,
     arvMode,
     property,
-  });
+    notes,
+  };
+  const snapshot = serializeDeal(currentState);
+  const dirty = snapshot !== baseline;
 
-  // Keep refs to the latest state + persister so we can flush on unmount.
-  const latestStateRef = useRef<DealState>(deal);
-  latestStateRef.current = buildState();
-  const onPersistRef = useRef(onPersist);
-  onPersistRef.current = onPersist;
-  const dirtyRef = useRef(false);
-
-  // Autosave 2s after a change (skip the initial mount so merely opening a deal
-  // doesn't bump its "last updated" time).
-  const mounted = useRef(false);
+  // Report dirty status up for the navigation guard.
   useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
-      return;
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  const doSave = () => {
+    setSaving(true);
+    let id = internalId;
+    if (!persisted || !id) {
+      id = onPersistNew(currentState);
+      setInternalId(id);
+      setPersisted(true);
+    } else {
+      onPersistExisting(id, currentState);
     }
-    dirtyRef.current = true;
-    const id = setTimeout(() => {
-      const t = Date.now();
-      onPersistRef.current(latestStateRef.current, t);
-      dirtyRef.current = false;
-      setSavedAt(t);
-    }, 2000);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values, purchaseType, closingMode, holdingMode, subject, comps, arvMode, property]);
+    setBaseline(snapshot);
+    setLastSavedAt(Date.now());
+    window.setTimeout(() => setSaving(false), 500);
+  };
 
-  // Flush any pending change immediately if the analyzer unmounts (e.g. the
-  // user navigates back before the debounce fires) so nothing is lost.
-  useEffect(() => {
-    return () => {
-      if (dirtyRef.current) {
-        onPersistRef.current(latestStateRef.current, Date.now());
-        dirtyRef.current = false;
-      }
-    };
-  }, []);
+  // Stable imperative handle so the shell can "Save & Leave".
+  const saveRef = useRef(doSave);
+  saveRef.current = doSave;
+  useImperativeHandle(ref, () => ({ save: () => saveRef.current() }), []);
 
   // Comparable-sales ARV estimate
   const compAnalysis = useMemo(
@@ -221,11 +257,21 @@ export function Analyzer({
     setComps(next.comps);
     setArvMode(next.arvMode);
     setProperty(next.property);
+    setNotes(next.notes ?? "");
   };
   const loadExample = () => applyState(exampleDealState());
   const clearDeal = () => applyState(emptyDealState());
 
   const D = (str: string) => (hasDeal ? str : "—");
+
+  // Header reflects whether this is a brand-new draft or a saved property.
+  const headerTitle = persisted
+    ? property.name.trim() || property.address.trim() || "Untitled deal"
+    : "New Deal";
+  const headerSubtitle = [property.address.trim(), property.cityState.trim()]
+    .filter(Boolean)
+    .join(" · ");
+  const canSave = dirty && !saving;
 
   const timeline: TimelineStep[] = [
     { label: "Purchase", value: fmtUSD(inputs.purchasePrice) },
@@ -473,8 +519,8 @@ export function Analyzer({
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         {/* ----------------------------- Header ----------------------------- */}
-        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <button
               type="button"
               onClick={onBack}
@@ -487,35 +533,57 @@ export function Analyzer({
                   clipRule="evenodd"
                 />
               </svg>
-              Back to Dashboard
+              Back
             </button>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Deal Analyzer
+            <p className="text-sm font-medium text-indigo-600">
+              Acquisition Workspace
+            </p>
+            <h1 className="mt-0.5 truncate text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              {headerTitle}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-600">
-              Model a Buy · Rehab · Rent · Refinance · Repeat deal across all
-              three phases. Press{" "}
-              <kbd className="rounded border border-slate-300 bg-slate-100 px-1 text-xs">
-                Enter
-              </kbd>{" "}
-              or click away to update.
+              {persisted && headerSubtitle
+                ? headerSubtitle
+                : "Model a Buy · Rehab · Rent · Refinance · Repeat deal, then save it to your pipeline."}
             </p>
           </div>
-          <div className="flex shrink-0 gap-2">
-            <button
-              type="button"
-              onClick={loadExample}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-            >
-              Load Example Deal
-            </button>
-            <button
-              type="button"
-              onClick={clearDeal}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-            >
-              Clear Deal
-            </button>
+          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+            <div className="flex items-center gap-3">
+              <SaveStatus
+                saving={saving}
+                dirty={dirty}
+                persisted={persisted}
+                lastSavedAt={lastSavedAt}
+              />
+              <button
+                type="button"
+                onClick={doSave}
+                disabled={!canSave}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold text-white transition ${
+                  canSave
+                    ? "bg-indigo-600 hover:bg-indigo-700"
+                    : "cursor-not-allowed bg-slate-300"
+                }`}
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={loadExample}
+                className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
+              >
+                Load Example
+              </button>
+              <button
+                type="button"
+                onClick={clearDeal}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </header>
 
@@ -528,7 +596,7 @@ export function Analyzer({
             recommendation={s.recommendation}
             stars={s.stars}
             hasDeal={hasDeal}
-            lastUpdated={savedAt}
+            lastUpdated={lastSavedAt}
           />
           <QuickSummary
             items={quickItems}
@@ -842,9 +910,11 @@ export function Analyzer({
             </PhaseCard>
 
             <p className="text-center text-xs text-slate-400">
-              {savedAt
-                ? `Autosaved to this browser at ${new Date(savedAt).toLocaleTimeString()}`
-                : "Changes autosave to this browser"}
+              {dirty
+                ? "Unsaved changes — use Save to store this deal in your browser."
+                : persisted
+                  ? "All changes saved to this browser."
+                  : "New deal — fill in the details and save it to your pipeline."}
             </p>
           </div>
 
@@ -1070,6 +1140,24 @@ export function Analyzer({
           </div>
         )}
 
+        {/* ============================== NOTES ============================== */}
+        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Notes
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Private notes for this deal — seller motivation, inspection items,
+            negotiation strategy, anything worth remembering.
+          </p>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={5}
+            placeholder="Add your notes…"
+            className="w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+          />
+        </section>
+
         <footer className="mt-10 border-t border-slate-200 pt-6 text-center text-xs text-slate-400">
           BRRRR AI · For educational estimates only — verify every number with
           your lender and run your own due diligence.
@@ -1077,9 +1165,60 @@ export function Analyzer({
       </main>
     </div>
   );
-}
+  },
+);
 
 /* ------------------------------ sub-components ----------------------------- */
+
+function SaveStatus({
+  saving,
+  dirty,
+  persisted,
+  lastSavedAt,
+}: {
+  saving: boolean;
+  dirty: boolean;
+  persisted: boolean;
+  lastSavedAt: number | null;
+}) {
+  if (saving) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-indigo-500" />
+        Saving…
+      </span>
+    );
+  }
+  if (dirty) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+        <span className="h-2 w-2 rounded-full bg-amber-500" />
+        Unsaved changes
+      </span>
+    );
+  }
+  if (persisted) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+        <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="currentColor">
+          <path
+            fillRule="evenodd"
+            d="M16.7 5.3a1 1 0 010 1.4l-7 7a1 1 0 01-1.4 0l-3-3a1 1 0 011.4-1.4l2.3 2.29 6.3-6.3a1 1 0 011.4 0z"
+            clipRule="evenodd"
+          />
+        </svg>
+        Saved
+        {lastSavedAt
+          ? ` · ${new Date(lastSavedAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`
+          : ""}
+      </span>
+    );
+  }
+  return <span className="text-xs font-medium text-slate-400">Not saved yet</span>;
+}
 
 function EmptyState({ onLoadExample }: { onLoadExample: () => void }) {
   return (

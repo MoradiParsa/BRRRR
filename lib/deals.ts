@@ -54,7 +54,7 @@ export const NUMERIC_KEYS: NumericKey[] = [
 
 export type Values = Record<NumericKey, number | null>;
 
-/** Everything the analyzer edits for one property. */
+/** Everything the workspace edits for one property. */
 export type DealState = {
   values: Values;
   purchaseType: PurchaseType;
@@ -64,6 +64,7 @@ export type DealState = {
   comps: Comp[];
   arvMode: ArvSource;
   property: Property;
+  notes: string;
 };
 
 export type SavedDeal = DealState & {
@@ -71,6 +72,12 @@ export type SavedDeal = DealState & {
   createdAt: number;
   savedAt: number;
 };
+
+/** Strip persistence metadata, leaving just the editable deal state. */
+export function toDealState(d: SavedDeal): DealState {
+  const { id: _id, createdAt: _c, savedAt: _s, ...rest } = d;
+  return rest;
+}
 
 const ARV_SOURCES: ArvSource[] = [
   "manual",
@@ -128,6 +135,7 @@ export function emptyDealState(): DealState {
     comps: [],
     arvMode: "manual",
     property: { ...EMPTY_PROPERTY },
+    notes: "",
   };
 }
 
@@ -141,6 +149,7 @@ export function exampleDealState(): DealState {
     comps: EXAMPLE_COMPS.map((c) => ({ ...c })),
     arvMode: "manual",
     property: { ...EXAMPLE_PROPERTY },
+    notes: "",
   };
 }
 
@@ -234,6 +243,7 @@ export function sanitizeDealState(x: unknown): DealState {
       ? (o.arvMode as ArvSource)
       : "manual",
     property: sanitizeProperty(o.property),
+    notes: typeof o.notes === "string" ? o.notes : "",
   };
 }
 
@@ -312,6 +322,7 @@ export type DealMetrics = {
   capitalRecoveryPct: number;
   cashLeftInDeal: number;
   cashOutSurplus: number;
+  equityCreated: number;
   dscr: number;
 };
 
@@ -337,6 +348,7 @@ export function dealMetrics(deal: DealState): DealMetrics {
     capitalRecoveryPct: r.brrrrPct,
     cashLeftInDeal: r.cashLeftInDeal,
     cashOutSurplus: r.cashOutSurplus,
+    equityCreated: r.equityCreated,
     dscr: r.dscr,
   };
 }
@@ -347,6 +359,40 @@ export function dealTitle(deal: DealState): string {
     deal.property.address.trim() ||
     "Untitled deal"
   );
+}
+
+/* --------------------------- portfolio summary ---------------------------- */
+
+export type PortfolioSummary = {
+  totalDeals: number;
+  buyCount: number;
+  cautionCount: number;
+  passCount: number;
+  completeCount: number;
+  avgScore: number;
+  totalMonthlyCashFlow: number;
+  totalEquityCreated: number;
+};
+
+/** Aggregate stats across saved deals for the dashboard overview. */
+export function portfolioSummary(deals: DealState[]): PortfolioSummary {
+  const metrics = deals.map(dealMetrics);
+  const complete = metrics.filter((m) => m.hasDeal);
+  const sumScore = complete.reduce((a, m) => a + m.score, 0);
+  return {
+    totalDeals: deals.length,
+    buyCount: metrics.filter((m) => m.hasDeal && m.recommendation === "Buy")
+      .length,
+    cautionCount: metrics.filter(
+      (m) => m.hasDeal && m.recommendation === "Buy with Caution",
+    ).length,
+    passCount: metrics.filter((m) => m.hasDeal && m.recommendation === "Pass")
+      .length,
+    completeCount: complete.length,
+    avgScore: complete.length ? Math.round(sumScore / complete.length) : 0,
+    totalMonthlyCashFlow: complete.reduce((a, m) => a + m.monthlyCashFlow, 0),
+    totalEquityCreated: complete.reduce((a, m) => a + m.equityCreated, 0),
+  };
 }
 
 /* --------------------------- comparison metrics --------------------------- */
