@@ -92,6 +92,11 @@ function serializeDeal(st: DealState): string {
     st.arvMode,
     st.property,
     st.notes ?? "",
+    st.sourceType ?? "manual",
+    st.sourceUrl ?? "",
+    st.sourceFileName ?? "",
+    st.sourceNotes ?? "",
+    st.importedAt ?? 0,
   ]);
 }
 
@@ -132,10 +137,23 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
   const [property, setProperty] = useState<Property>(deal.property);
   const [notes, setNotes] = useState<string>(deal.notes ?? "");
 
+  // Import metadata is read-only inside the workspace; carry it through saves.
+  const source = {
+    sourceType: deal.sourceType ?? "manual",
+    sourceUrl: deal.sourceUrl,
+    sourceFileName: deal.sourceFileName,
+    sourceNotes: deal.sourceNotes,
+    importedAt: deal.importedAt,
+  };
+
   // ---- save / dirty tracking ----
   const [persisted, setPersisted] = useState(mode === "edit");
   const [internalId, setInternalId] = useState<string | null>(dealId);
-  const [baseline, setBaseline] = useState<string>(() => serializeDeal(deal));
+  // A new draft is "clean" only if it equals a blank deal; an imported draft
+  // (with a prefilled link/file/rows) therefore starts dirty and savable.
+  const [baseline, setBaseline] = useState<string>(() =>
+    serializeDeal(mode === "new" ? emptyDealState() : deal),
+  );
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(initialSavedAt);
   const [saving, setSaving] = useState(false);
 
@@ -149,6 +167,7 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
     arvMode,
     property,
     notes,
+    ...source,
   };
   const snapshot = serializeDeal(currentState);
   const dirty = snapshot !== baseline;
@@ -589,6 +608,7 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
 
         {/* ----------------- Property header + quick summary ---------------- */}
         <div className="mb-6 space-y-6">
+          {source.sourceType !== "manual" && <SourceCard source={source} />}
           <PropertyHeader
             property={property}
             onText={updatePropertyText}
@@ -1169,6 +1189,79 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
 );
 
 /* ------------------------------ sub-components ----------------------------- */
+
+function SourceCard({
+  source,
+}: {
+  source: {
+    sourceType: string;
+    sourceUrl?: string;
+    sourceFileName?: string;
+    sourceNotes?: string;
+    importedAt?: number;
+  };
+}) {
+  const label =
+    source.sourceType === "link"
+      ? "Imported from listing link"
+      : source.sourceType === "pdf"
+        ? "Imported from uploaded document"
+        : source.sourceType === "csv"
+          ? "Imported from CSV"
+          : "Imported";
+  return (
+    <section className="rounded-2xl border border-sky-200 bg-sky-50/60 p-4">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
+          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
+            <path
+              fillRule="evenodd"
+              d="M10 2a1 1 0 011 1v7.59l2.3-2.3a1 1 0 011.4 1.42l-4 4a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.42l2.3 2.3V3a1 1 0 011-1zM4 15a1 1 0 011 1v1h10v-1a1 1 0 112 0v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1a1 1 0 011-1z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold text-sky-900">{label}</h3>
+            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-700">
+              {source.sourceType}
+            </span>
+          </div>
+          {source.sourceUrl && (
+            <a
+              href={source.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 block truncate text-xs font-medium text-sky-700 underline hover:text-sky-800"
+            >
+              {source.sourceUrl}
+            </a>
+          )}
+          {source.sourceFileName && (
+            <div className="mt-1 truncate text-xs font-medium text-slate-600">
+              {source.sourceFileName}
+            </div>
+          )}
+          {source.sourceNotes && (
+            <p className="mt-1 text-xs text-slate-500">{source.sourceNotes}</p>
+          )}
+          {source.sourceType === "link" && (
+            <p className="mt-1.5 text-xs text-sky-700/80">
+              Automatic link extraction coming soon — enter the details manually
+              for now.
+            </p>
+          )}
+          {source.importedAt && (
+            <p className="mt-1 text-[11px] text-slate-400">
+              Imported {new Date(source.importedAt).toLocaleString()}
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function SaveStatus({
   saving,

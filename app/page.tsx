@@ -21,14 +21,22 @@ import { DashboardHome } from "@/components/DashboardHome";
 import { SavedDeals } from "@/components/SavedDeals";
 import { Workspace, type WorkspaceHandle } from "@/components/Workspace";
 import { Compare } from "@/components/Compare";
+import { ImportProperty } from "@/components/ImportProperty";
 import { ComingSoon } from "@/components/ComingSoon";
 
-type View = "dashboard" | "saved" | "compare" | "portfolio" | "settings";
+type View =
+  | "dashboard"
+  | "import"
+  | "saved"
+  | "compare"
+  | "portfolio"
+  | "settings";
 
 type NavItem = { key: View; label: string; icon: ReactNode };
 
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: <IconGrid /> },
+  { key: "import", label: "Import Property", icon: <IconImport /> },
   { key: "saved", label: "Saved Deals", icon: <IconStack /> },
   { key: "compare", label: "Compare Deals", icon: <IconCompare /> },
   { key: "portfolio", label: "Portfolio", icon: <IconChart /> },
@@ -117,6 +125,40 @@ export default function Home() {
     setWorkspaceDirty(false);
   };
 
+  // Open the workspace with an imported (or blank) draft — an unsaved new deal.
+  const openDraft = (deal: DealState) => {
+    setWorkspace({
+      mode: "new",
+      dealId: null,
+      deal,
+      savedAt: null,
+      returnView: "import",
+    });
+    setWorkspaceKey((k) => k + 1);
+    setWorkspaceDirty(false);
+  };
+
+  // CSV import: persist every parsed row, then open the first in the workspace.
+  const importDeals = (states: DealState[]) => {
+    if (states.length === 0) return;
+    const saved = states.map(makeSavedDeal);
+    setDeals((prev) => {
+      const next = [...saved, ...prev];
+      saveDeals(next);
+      return next;
+    });
+    const first = saved[0];
+    setWorkspace({
+      mode: "edit",
+      dealId: first.id,
+      deal: toDealState(first),
+      savedAt: first.savedAt,
+      returnView: "saved",
+    });
+    setWorkspaceKey((k) => k + 1);
+    setWorkspaceDirty(false);
+  };
+
   const onDuplicate = (id: string) => {
     setDeals((prev) => {
       const src = prev.find((d) => d.id === id);
@@ -186,6 +228,13 @@ export default function Home() {
           onPersistExisting={onPersistExisting}
           onDirtyChange={onDirtyChange}
           onBack={() => requestNavigate(workspace.returnView)}
+        />
+      );
+    } else if (view === "import") {
+      content = (
+        <ImportProperty
+          onCreateDraft={openDraft}
+          onImportDeals={importDeals}
         />
       );
     } else if (view === "saved") {
@@ -399,6 +448,14 @@ function IconStack() {
     <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor">
       <path d="M10 1l9 4-9 4-9-4 9-4z" />
       <path d="M1 9l9 4 9-4M1 13l9 4 9-4" opacity="0.5" />
+    </svg>
+  );
+}
+function IconImport() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor">
+      <path d="M10 2a1 1 0 011 1v6.59l1.3-1.3a1 1 0 011.4 1.42l-3 3a1 1 0 01-1.4 0l-3-3a1 1 0 011.4-1.42l1.3 1.3V3a1 1 0 011-1z" />
+      <path d="M3 13a1 1 0 011 1v2h12v-2a1 1 0 112 0v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2a1 1 0 011-1z" />
     </svg>
   );
 }

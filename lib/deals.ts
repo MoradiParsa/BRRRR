@@ -54,6 +54,8 @@ export const NUMERIC_KEYS: NumericKey[] = [
 
 export type Values = Record<NumericKey, number | null>;
 
+export type SourceType = "manual" | "link" | "pdf" | "csv";
+
 /** Everything the workspace edits for one property. */
 export type DealState = {
   values: Values;
@@ -65,6 +67,12 @@ export type DealState = {
   arvMode: ArvSource;
   property: Property;
   notes: string;
+  // Where this deal came from (import metadata).
+  sourceType: SourceType;
+  sourceUrl?: string;
+  sourceFileName?: string;
+  sourceNotes?: string;
+  importedAt?: number;
 };
 
 export type SavedDeal = DealState & {
@@ -136,6 +144,7 @@ export function emptyDealState(): DealState {
     arvMode: "manual",
     property: { ...EMPTY_PROPERTY },
     notes: "",
+    sourceType: "manual",
   };
 }
 
@@ -150,6 +159,134 @@ export function exampleDealState(): DealState {
     arvMode: "manual",
     property: { ...EXAMPLE_PROPERTY },
     notes: "",
+    sourceType: "manual",
+  };
+}
+
+/* ------------------------------ import drafts ----------------------------- */
+
+/** A blank draft that records the listing link it came from. */
+export function linkDealState(url: string, notes: string): DealState {
+  return {
+    ...emptyDealState(),
+    sourceType: "link",
+    sourceUrl: url.trim(),
+    sourceNotes: notes.trim() || undefined,
+    importedAt: Date.now(),
+  };
+}
+
+/** A blank draft that records an uploaded document's filename. */
+export function pdfDealState(fileName: string): DealState {
+  return {
+    ...emptyDealState(),
+    sourceType: "pdf",
+    sourceFileName: fileName,
+    importedAt: Date.now(),
+  };
+}
+
+export type CsvRow = {
+  name: string;
+  address: string;
+  price: number | null;
+  beds: number | null;
+  baths: number | null;
+  sqft: number | null;
+};
+
+/** Minimal RFC-4180-ish CSV parser (handles quotes, escaped quotes, CRLF). */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let cur: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ",") {
+      cur.push(field);
+      field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      cur.push(field);
+      rows.push(cur);
+      cur = [];
+      field = "";
+    } else field += c;
+  }
+  if (field.length > 0 || cur.length > 0) {
+    cur.push(field);
+    rows.push(cur);
+  }
+  return rows.filter(
+    (r) => r.length > 0 && !(r.length === 1 && r[0].trim() === ""),
+  );
+}
+
+/** Map a listings CSV to preview rows, matching columns by fuzzy header name. */
+export function csvToPreviewRows(text: string): CsvRow[] {
+  const rows = parseCsv(text);
+  if (rows.length < 2) return [];
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const find = (...keys: string[]) =>
+    header.findIndex((h) => keys.some((k) => h.includes(k)));
+  const iAddr = find("address", "street");
+  const iName = find("name", "title", "property");
+  const iPrice = find("price", "list", "purchase", "asking");
+  const iBeds = find("bed", "br");
+  const iBaths = find("bath");
+  const iSqft = find("sqft", "sq ft", "square", "size");
+
+  const num = (s: string) => {
+    const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+    return isFinite(n) ? n : null;
+  };
+
+  const out: CsvRow[] = [];
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    const get = (i: number) => (i >= 0 && i < cells.length ? cells[i].trim() : "");
+    const address = get(iAddr);
+    const name = get(iName) || address;
+    const price = num(get(iPrice));
+    const beds = num(get(iBeds));
+    const baths = num(get(iBaths));
+    const sqft = num(get(iSqft));
+    if (!address && !name && price == null && beds == null && sqft == null) {
+      continue; // skip blank rows
+    }
+    out.push({ name, address, price, beds, baths, sqft });
+  }
+  return out;
+}
+
+/** Build a deal draft from one parsed CSV row. */
+export function csvRowToDealState(row: CsvRow, fileName: string): DealState {
+  const base = emptyDealState();
+  return {
+    ...base,
+    values: { ...base.values, purchasePrice: row.price },
+    subject: { sqft: row.sqft, beds: row.beds, baths: row.baths },
+    property: {
+      name: row.name,
+      address: row.address,
+      cityState: "",
+      beds: row.beds,
+      baths: row.baths,
+      sqft: row.sqft,
+    },
+    sourceType: "csv",
+    sourceFileName: fileName,
+    importedAt: Date.now(),
   };
 }
 
@@ -244,6 +381,16 @@ export function sanitizeDealState(x: unknown): DealState {
       : "manual",
     property: sanitizeProperty(o.property),
     notes: typeof o.notes === "string" ? o.notes : "",
+    sourceType: (["manual", "link", "pdf", "csv"] as const).includes(
+      o.sourceType as SourceType,
+    )
+      ? (o.sourceType as SourceType)
+      : "manual",
+    sourceUrl: typeof o.sourceUrl === "string" ? o.sourceUrl : undefined,
+    sourceFileName:
+      typeof o.sourceFileName === "string" ? o.sourceFileName : undefined,
+    sourceNotes: typeof o.sourceNotes === "string" ? o.sourceNotes : undefined,
+    importedAt: numOrNull(o.importedAt) ?? undefined,
   };
 }
 
