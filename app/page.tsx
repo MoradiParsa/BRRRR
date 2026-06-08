@@ -12,6 +12,7 @@ import {
 } from "@/lib/deals";
 import { Dashboard } from "@/components/Dashboard";
 import { Analyzer } from "@/components/Analyzer";
+import { Compare } from "@/components/Compare";
 import { ComingSoon } from "@/components/ComingSoon";
 
 type View = "dashboard" | "analyzer" | "compare" | "portfolio" | "settings";
@@ -127,12 +128,7 @@ export default function Home() {
         />
       );
     } else if (view === "compare") {
-      content = (
-        <ComingSoon
-          title="Compare Deals"
-          description="Line up saved deals side by side to compare returns, risk, and capital efficiency. This view is on the way."
-        />
-      );
+      content = <Compare deals={deals} onOpen={openDeal} />;
     } else if (view === "portfolio") {
       content = (
         <ComingSoon

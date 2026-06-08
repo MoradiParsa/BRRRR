@@ -9,6 +9,7 @@ import {
   defaultInputs,
   investmentGrade,
   MAX_COMPS,
+  sensitivity,
   summarize,
   type ArvSource,
   type Comp,
@@ -16,10 +17,12 @@ import {
   type CostMode,
   type Inputs,
   type InvestmentGrade,
+  type Level,
   type Property,
   type PurchaseType,
   type Recommendation,
   type Subject,
+  type Verdict,
 } from "./brrrr";
 
 /* ------------------------------- deal state ------------------------------- */
@@ -344,6 +347,76 @@ export function dealTitle(deal: DealState): string {
     deal.property.address.trim() ||
     "Untitled deal"
   );
+}
+
+/* --------------------------- comparison metrics --------------------------- */
+
+/** The full metric set used by the Compare page (includes sensitivity, which
+ *  is heavier — so it's kept separate from the dashboard's dealMetrics). */
+export type CompareMetrics = {
+  hasDeal: boolean;
+  recommendation: Recommendation;
+  stars: number;
+  score: number;
+  grade: InvestmentGrade;
+  risk: Level;
+  purchasePrice: number;
+  rehabCost: number;
+  cashInvested: number;
+  arvUsed: number;
+  arvSource: ArvSource;
+  monthlyRent: number;
+  monthlyCashFlow: number;
+  annualCashFlow: number;
+  dscr: number;
+  capRate: number;
+  cashOnCash: number;
+  capitalRecoveryPct: number;
+  cashLeftInDeal: number;
+  cashOutSurplus: number;
+  equityCreated: number;
+  breakEvenRent: number;
+  rentForDSCR120: number;
+  worstCaseVerdict: Verdict;
+  worstCaseCashFlow: number;
+};
+
+export function compareMetrics(deal: DealState): CompareMetrics {
+  const { inputs } = dealInputs(deal);
+  const r = analyze(inputs);
+  const s = summarize(inputs, r);
+  const sens = sensitivity(inputs);
+  const hasDeal =
+    (deal.values.purchasePrice ?? 0) > 0 ||
+    (deal.values.arv ?? 0) > 0 ||
+    (deal.values.monthlyRent ?? 0) > 0;
+  return {
+    hasDeal,
+    recommendation: s.recommendation,
+    stars: s.stars,
+    score: s.score,
+    grade: investmentGrade(s.score, s.recommendation),
+    risk: s.risk,
+    purchasePrice: inputs.purchasePrice,
+    rehabCost: inputs.rehabCosts,
+    cashInvested: r.cashInvested,
+    arvUsed: inputs.arv,
+    arvSource: deal.arvMode,
+    monthlyRent: inputs.monthlyRent,
+    monthlyCashFlow: r.monthlyCashFlow,
+    annualCashFlow: r.annualCashFlow,
+    dscr: r.dscr,
+    capRate: r.capRate,
+    cashOnCash: r.cashOnCash,
+    capitalRecoveryPct: r.brrrrPct,
+    cashLeftInDeal: r.cashLeftInDeal,
+    cashOutSurplus: r.cashOutSurplus,
+    equityCreated: r.equityCreated,
+    breakEvenRent: r.breakEvenRent,
+    rentForDSCR120: r.rentForDSCR120,
+    worstCaseVerdict: sens.worstCase.verdict,
+    worstCaseCashFlow: sens.worstCase.monthlyCashFlow,
+  };
 }
 
 /* ------------------------------- persistence ------------------------------ */

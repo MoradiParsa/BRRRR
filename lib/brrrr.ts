@@ -952,6 +952,14 @@ export type ArvSource =
   | "average"
   | "aggressive";
 
+export const ARV_SOURCE_LABELS: Record<ArvSource, string> = {
+  manual: "Manual",
+  comp: "Comparable",
+  conservative: "Conservative",
+  average: "Average",
+  aggressive: "Aggressive",
+};
+
 /** Resolve the ARV that the selected source implies. Combined sources fall
  *  back gracefully when one input is missing. */
 export function arvForSource(
