@@ -57,7 +57,7 @@ export function DealChecklist({ items }: { items: ChecklistItem[] }) {
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Deal Checklist
+          Property Checklist
         </h2>
         <span className="text-xs font-medium text-slate-500">
           {passed}/{items.length} passing

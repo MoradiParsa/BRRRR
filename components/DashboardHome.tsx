@@ -1,13 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
-import { fmtNum, fmtUSD, type InvestmentGrade } from "@/lib/brrrr";
+import { fmtUSD, investmentGrade, type InvestmentGrade } from "@/lib/brrrr";
 import {
   dealMetrics,
   dealTitle,
   portfolioSummary,
+  statusLabel,
+  type DealMetrics,
+  type PipelineStatus,
   type SavedDeal,
 } from "@/lib/deals";
+import { statusColor } from "@/components/AcquisitionPipeline";
 
 function gradeColor(g: InvestmentGrade): string {
   if (g === "Pass") return "bg-red-100 text-red-700 ring-red-200";
@@ -16,26 +20,56 @@ function gradeColor(g: InvestmentGrade): string {
   return "bg-amber-100 text-amber-700 ring-amber-200";
 }
 
+const OVERVIEW_STAGES: PipelineStatus[] = [
+  "watching",
+  "analyzing",
+  "offer_submitted",
+  "under_contract",
+  "owned",
+];
+
+const ACTIVE_STAGES: PipelineStatus[] = [
+  "watching",
+  "analyzing",
+  "offer_submitted",
+  "under_contract",
+];
+
 export function DashboardHome({
   deals,
-  onNew,
+  onAddProperty,
   onOpen,
   onViewAll,
 }: {
   deals: SavedDeal[];
-  onNew: () => void;
+  onAddProperty: () => void;
   onOpen: (id: string) => void;
   onViewAll: () => void;
 }) {
   const summary = useMemo(() => portfolioSummary(deals), [deals]);
-  const recent = useMemo(
-    () =>
-      [...deals]
-        .sort((a, b) => b.savedAt - a.savedAt)
-        .slice(0, 5)
-        .map((deal) => ({ deal, m: dealMetrics(deal) })),
+  const rows = useMemo(
+    () => deals.map((deal) => ({ deal, m: dealMetrics(deal) })),
     [deals],
   );
+  const recent = useMemo(
+    () => [...rows].sort((a, b) => b.deal.savedAt - a.deal.savedAt).slice(0, 5),
+    [rows],
+  );
+  const highPriority = useMemo(
+    () =>
+      rows
+        .filter(
+          ({ deal, m }) => m.hasDeal && ACTIVE_STAGES.includes(deal.status),
+        )
+        .sort((a, b) => b.m.score - a.m.score)
+        .slice(0, 5),
+    [rows],
+  );
+
+  const avgGrade =
+    summary.completeCount > 0
+      ? investmentGrade(summary.avgScore, "Buy")
+      : "—";
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -47,140 +81,179 @@ export function DashboardHome({
             Dashboard
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            A high-level view of your acquisition pipeline.
+            Your acquisition command center.
           </p>
         </div>
         <button
           type="button"
-          onClick={onNew}
+          onClick={onAddProperty}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
         >
           <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
             <path d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" />
           </svg>
-          New Deal
+          Add Property
         </button>
       </div>
 
       {deals.length === 0 ? (
-        <EmptyOverview onNew={onNew} />
+        <EmptyOverview onAddProperty={onAddProperty} />
       ) : (
         <>
-          {/* Overview stats */}
-          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Stat label="Saved Deals" value={String(summary.totalDeals)} />
-            <Stat
-              label="Buy-Rated"
-              value={String(summary.buyCount)}
-              tone="good"
-            />
-            <Stat
-              label="Avg Score"
-              value={summary.completeCount ? `${summary.avgScore}/100` : "—"}
-            />
-            <Stat
-              label="Total Cash Flow"
-              value={`${fmtUSD(summary.totalMonthlyCashFlow)}/mo`}
-              tone={summary.totalMonthlyCashFlow >= 0 ? "good" : "bad"}
-            />
-          </div>
-
-          {/* Recommendation breakdown + equity */}
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Pipeline Mix
-              </h2>
-              <div className="mt-3 grid grid-cols-3 gap-3">
-                <MixPill label="Buy" count={summary.buyCount} tone="good" />
-                <MixPill
-                  label="Caution"
-                  count={summary.cautionCount}
-                  tone="warn"
-                />
-                <MixPill label="Pass" count={summary.passCount} tone="bad" />
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Forced Equity
-              </h2>
-              <div className="mt-3 text-2xl font-bold text-emerald-600">
-                {fmtUSD(summary.totalEquityCreated)}
-              </div>
-              <p className="mt-1 text-xs text-slate-500">
-                Combined equity created across complete deals.
-              </p>
-            </div>
-          </div>
-
-          {/* Recent deals */}
-          <div className="mt-8 flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Recent Deals
-            </h2>
-            <button
-              type="button"
-              onClick={onViewAll}
-              className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
-            >
-              View all →
-            </button>
-          </div>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <ul className="divide-y divide-slate-100">
-              {recent.map(({ deal, m }) => (
-                <li
-                  key={deal.id}
-                  className="flex items-center gap-4 p-4 transition hover:bg-slate-50"
+          {/* Pipeline overview */}
+          <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Pipeline Overview
+          </h2>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {OVERVIEW_STAGES.map((s) => (
+              <div
+                key={s}
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <span
+                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ring-inset ${statusColor(s)}`}
                 >
-                  <span
-                    className={`shrink-0 rounded-lg px-2 py-1 text-sm font-extrabold ring-1 ring-inset ${gradeColor(m.grade)}`}
-                  >
-                    {m.grade}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-slate-900">
-                      {dealTitle(deal)}
-                    </div>
-                    <div className="truncate text-xs text-slate-500">
-                      {deal.property.address.trim() || "No address"}
-                    </div>
-                  </div>
-                  <div className="hidden shrink-0 text-right sm:block">
-                    <div className="text-xs uppercase tracking-wide text-slate-400">
-                      Cash Flow
-                    </div>
-                    <div
-                      className={`text-sm font-bold ${
-                        m.monthlyCashFlow >= 0
-                          ? "text-slate-800"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {fmtUSD(m.monthlyCashFlow)}/mo
-                    </div>
-                  </div>
-                  <div className="hidden shrink-0 text-right md:block">
-                    <div className="text-xs uppercase tracking-wide text-slate-400">
-                      Score
-                    </div>
-                    <div className="text-sm font-bold text-slate-800">
-                      {m.hasDeal ? `${m.score}` : "—"}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(deal.id)}
-                    className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
-                  >
-                    Open
-                  </button>
-                </li>
-              ))}
-            </ul>
+                  {statusLabel(s)}
+                </span>
+                <div className="mt-2 text-2xl font-bold text-slate-900">
+                  {summary.statusCounts[s]}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Averages */}
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Stat label="Total Properties" value={String(summary.totalDeals)} />
+            <Stat
+              label="Average Investment Grade"
+              value={avgGrade}
+              accent
+            />
+            <Stat
+              label="Average Cash Flow"
+              value={
+                summary.completeCount
+                  ? `${fmtUSD(summary.avgMonthlyCashFlow)}/mo`
+                  : "—"
+              }
+              tone={summary.avgMonthlyCashFlow >= 0 ? "good" : "bad"}
+            />
+          </div>
+
+          {/* Two columns: high priority + recent */}
+          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <PropertyList
+              title="High Priority Properties"
+              emptyText="No active properties with analysis yet."
+              rows={highPriority}
+              onOpen={onOpen}
+              showScore
+            />
+            <PropertyList
+              title="Recent Properties"
+              emptyText="No properties yet."
+              rows={recent}
+              onOpen={onOpen}
+              onViewAll={onViewAll}
+            />
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function PropertyList({
+  title,
+  emptyText,
+  rows,
+  onOpen,
+  onViewAll,
+  showScore,
+}: {
+  title: string;
+  emptyText: string;
+  rows: { deal: SavedDeal; m: DealMetrics }[];
+  onOpen: (id: string) => void;
+  onViewAll?: () => void;
+  showScore?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          {title}
+        </h2>
+        {onViewAll && (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="text-xs font-medium text-indigo-600 transition hover:text-indigo-700"
+          >
+            View all →
+          </button>
+        )}
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-slate-400">{emptyText}</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {rows.map(({ deal, m }) => (
+            <li
+              key={deal.id}
+              className="flex items-center gap-3 px-5 py-3 transition hover:bg-slate-50"
+            >
+              <span
+                className={`shrink-0 rounded-lg px-2 py-1 text-sm font-extrabold ring-1 ring-inset ${gradeColor(m.grade)}`}
+              >
+                {m.grade}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-slate-900">
+                  {dealTitle(deal)}
+                </div>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ring-inset ${statusColor(deal.status)}`}
+                  >
+                    {statusLabel(deal.status)}
+                  </span>
+                  <span className="truncate text-xs text-slate-400">
+                    {deal.property.address.trim() || "No address"}
+                  </span>
+                </div>
+              </div>
+              <div className="hidden shrink-0 text-right sm:block">
+                <div className="text-[10px] uppercase tracking-wide text-slate-400">
+                  {showScore ? "Score" : "Cash Flow"}
+                </div>
+                <div
+                  className={`text-sm font-bold ${
+                    showScore
+                      ? "text-slate-800"
+                      : m.monthlyCashFlow >= 0
+                        ? "text-slate-800"
+                        : "text-red-600"
+                  }`}
+                >
+                  {showScore
+                    ? m.hasDeal
+                      ? m.score
+                      : "—"
+                    : `${fmtUSD(m.monthlyCashFlow)}`}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onOpen(deal.id)}
+                className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
+              >
+                Open
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -190,13 +263,16 @@ function Stat({
   label,
   value,
   tone = "neutral",
+  accent,
 }: {
   label: string;
   value: string;
   tone?: "neutral" | "good" | "bad";
+  accent?: boolean;
 }) {
-  const color =
-    tone === "good"
+  const color = accent
+    ? "text-indigo-600"
+    : tone === "good"
       ? "text-emerald-600"
       : tone === "bad"
         ? "text-red-600"
@@ -211,31 +287,7 @@ function Stat({
   );
 }
 
-function MixPill({
-  label,
-  count,
-  tone,
-}: {
-  label: string;
-  count: number;
-  tone: "good" | "warn" | "bad";
-}) {
-  const map = {
-    good: "bg-emerald-50 text-emerald-700",
-    warn: "bg-amber-50 text-amber-700",
-    bad: "bg-red-50 text-red-700",
-  };
-  return (
-    <div className={`rounded-xl ${map[tone]} px-3 py-3 text-center`}>
-      <div className="text-2xl font-bold">{count}</div>
-      <div className="text-xs font-semibold uppercase tracking-wide">
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function EmptyOverview({ onNew }: { onNew: () => void }) {
+function EmptyOverview({ onAddProperty }: { onAddProperty: () => void }) {
   return (
     <div className="mt-10 flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-16 text-center">
       <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
@@ -247,17 +299,18 @@ function EmptyOverview({ onNew }: { onNew: () => void }) {
         Your pipeline is empty
       </h3>
       <p className="mt-1 max-w-sm text-sm text-slate-500">
-        Create your first deal to start building your acquisition dashboard.
+        Add your first property to start building your acquisition command
+        center.
       </p>
       <button
         type="button"
-        onClick={onNew}
+        onClick={onAddProperty}
         className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
       >
         <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
           <path d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" />
         </svg>
-        Create your first deal
+        Add Property
       </button>
     </div>
   );

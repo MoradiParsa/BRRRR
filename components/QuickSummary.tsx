@@ -31,7 +31,7 @@ export function QuickSummary({
             hasDeal ? recBadge[recommendation] : "bg-slate-100 text-slate-500 ring-slate-200"
           }`}
         >
-          {hasDeal ? recommendation : "No deal yet"}
+          {hasDeal ? recommendation : "No property yet"}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">

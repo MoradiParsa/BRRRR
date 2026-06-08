@@ -189,7 +189,7 @@ const ROWS: Row[] = [
   },
   {
     kind: "metric",
-    label: "Cash Left in Deal",
+    label: "Cash Left",
     cell: ({ m }) => fmtUSD(m.cashLeftInDeal),
     rank: ({ m }) => -m.cashLeftInDeal,
   },
@@ -288,7 +288,7 @@ export function Compare({
             Nothing to compare yet
           </h2>
           <p className="mt-1 max-w-sm text-sm text-slate-500">
-            Save at least two deals to compare opportunities.
+            Save at least two properties to compare opportunities.
           </p>
         </div>
       </Shell>
@@ -303,7 +303,7 @@ export function Compare({
       <section className="mt-6">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Select deals to compare
+            Select properties to compare
           </h2>
           <span className="text-xs font-medium text-slate-400">
             {selectedIds.length} of {MAX_SELECT} selected · min {MIN_SELECT}
@@ -588,11 +588,11 @@ function Shell({ children }: { children: ReactNode }) {
       <div>
         <p className="text-sm font-medium text-indigo-600">Side by side</p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
-          Compare Deals
+          Compare
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Stack 2–4 saved deals against each other. The best value in each row is
-          highlighted.
+          Stack 2–4 saved properties against each other. The best value in each
+          row is highlighted.
         </p>
       </div>
       {children}

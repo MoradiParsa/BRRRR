@@ -33,9 +33,11 @@ import {
   emptyDealState,
   exampleDealState,
   newComp,
+  PIPELINE_STATUSES,
   resolveInputs,
   type DealState,
   type NumericKey,
+  type PipelineStatus,
   type Values,
 } from "@/lib/deals";
 import {
@@ -92,6 +94,7 @@ function serializeDeal(st: DealState): string {
     st.arvMode,
     st.property,
     st.notes ?? "",
+    st.status ?? "analyzing",
     st.sourceType ?? "manual",
     st.sourceUrl ?? "",
     st.sourceFileName ?? "",
@@ -136,6 +139,9 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
   const [arvMode, setArvMode] = useState<ArvSource>(deal.arvMode);
   const [property, setProperty] = useState<Property>(deal.property);
   const [notes, setNotes] = useState<string>(deal.notes ?? "");
+  const [status, setStatus] = useState<PipelineStatus>(
+    deal.status ?? "analyzing",
+  );
 
   // Import metadata is read-only inside the workspace; carry it through saves.
   const source = {
@@ -167,6 +173,7 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
     arvMode,
     property,
     notes,
+    status,
     ...source,
   };
   const snapshot = serializeDeal(currentState);
@@ -277,6 +284,7 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
     setArvMode(next.arvMode);
     setProperty(next.property);
     setNotes(next.notes ?? "");
+    setStatus(next.status ?? "analyzing");
   };
   const loadExample = () => applyState(exampleDealState());
   const clearDeal = () => applyState(emptyDealState());
@@ -285,8 +293,8 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
 
   // Header reflects whether this is a brand-new draft or a saved property.
   const headerTitle = persisted
-    ? property.name.trim() || property.address.trim() || "Untitled deal"
-    : "New Deal";
+    ? property.name.trim() || property.address.trim() || "Untitled property"
+    : "New Property";
   const headerSubtitle = [property.address.trim(), property.cityState.trim()]
     .filter(Boolean)
     .join(" · ");
@@ -348,7 +356,7 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
           tone: "good",
         }
       : {
-          label: "Cash Left in Deal",
+          label: "Cash Left",
           value: D(fmtUSD(r.cashLeftInDeal)),
           tone: hasDeal ? cashLeftTone(r.cashLeftInDeal) : "neutral",
         };
@@ -479,7 +487,7 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
                   clipRule="evenodd"
                 />
               </svg>
-              Deals
+              Pipeline
             </button>
             <BarStat label="Rating">
               {hasDeal ? (
@@ -499,7 +507,7 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
               </BarValue>
             </BarStat>
             <BarStat
-              label={r.cashOutSurplus > 0 ? "Cash Out Surplus" : "Cash Left in Deal"}
+              label={r.cashOutSurplus > 0 ? "Cash Out Surplus" : "Cash Left"}
             >
               <BarValue
                 tone={
@@ -563,10 +571,24 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
             <p className="mt-1 max-w-2xl text-sm text-slate-600">
               {persisted && headerSubtitle
                 ? headerSubtitle
-                : "Model a Buy · Rehab · Rent · Refinance · Repeat deal, then save it to your pipeline."}
+                : "Model the full Buy · Rehab · Rent · Refinance · Repeat strategy, then save this property to your pipeline."}
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              Pipeline status
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as PipelineStatus)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+              >
+                {PIPELINE_STATUSES.map((st) => (
+                  <option key={st.value} value={st.value}>
+                    {st.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="flex items-center gap-3">
               <SaveStatus
                 saving={saving}
@@ -827,7 +849,7 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
                   />
                 ) : (
                   <ReadOut
-                    label="Cash Left in Deal"
+                    label="Cash Left"
                     value={D(fmtUSD(r.cashLeftInDeal))}
                     hint="still tied up"
                     tone={hasDeal ? cashLeftTone(r.cashLeftInDeal) : "neutral"}
@@ -931,10 +953,10 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
 
             <p className="text-center text-xs text-slate-400">
               {dirty
-                ? "Unsaved changes — use Save to store this deal in your browser."
+                ? "Unsaved changes — use Save to store this property in your browser."
                 : persisted
                   ? "All changes saved to this browser."
-                  : "New deal — fill in the details and save it to your pipeline."}
+                  : "New property — fill in the details and save it to your pipeline."}
             </p>
           </div>
 
@@ -1145,8 +1167,8 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
               BRRRR Timeline
             </h2>
             <p className="mb-4 text-xs text-slate-500">
-              The full lifecycle of the deal, from acquisition to monthly cash
-              flow.
+              The full lifecycle of the property, from acquisition to monthly
+              cash flow.
             </p>
             <div className="overflow-x-auto pb-2">
               <Timeline steps={timeline} />
@@ -1166,8 +1188,8 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
             Notes
           </h2>
           <p className="mb-3 text-xs text-slate-500">
-            Private notes for this deal — seller motivation, inspection items,
-            negotiation strategy, anything worth remembering.
+            Private notes for this property — seller motivation, inspection
+            items, negotiation strategy, anything worth remembering.
           </p>
           <textarea
             value={notes}
@@ -1322,18 +1344,18 @@ function EmptyState({ onLoadExample }: { onLoadExample: () => void }) {
         </svg>
       </span>
       <h3 className="mt-4 text-base font-semibold text-slate-800">
-        No deal to analyze yet
+        No property to analyze yet
       </h3>
       <p className="mt-1 max-w-xs text-sm text-slate-500">
         Enter at least a purchase price, ARV, and rent — or load the example
-        deal to see the full analysis.
+        property to see the full analysis.
       </p>
       <button
         type="button"
         onClick={onLoadExample}
         className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
       >
-        Load Example Deal
+        Load Example
       </button>
     </div>
   );

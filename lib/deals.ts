@@ -56,6 +56,28 @@ export type Values = Record<NumericKey, number | null>;
 
 export type SourceType = "manual" | "link" | "pdf" | "csv";
 
+/** Where a property sits in the acquisition pipeline. */
+export type PipelineStatus =
+  | "watching"
+  | "analyzing"
+  | "offer_submitted"
+  | "under_contract"
+  | "owned"
+  | "archived";
+
+export const PIPELINE_STATUSES: { value: PipelineStatus; label: string }[] = [
+  { value: "watching", label: "Watching" },
+  { value: "analyzing", label: "Analyzing" },
+  { value: "offer_submitted", label: "Offer Submitted" },
+  { value: "under_contract", label: "Under Contract" },
+  { value: "owned", label: "Owned" },
+  { value: "archived", label: "Archived" },
+];
+
+export function statusLabel(s: PipelineStatus): string {
+  return PIPELINE_STATUSES.find((x) => x.value === s)?.label ?? "Analyzing";
+}
+
 /** Everything the workspace edits for one property. */
 export type DealState = {
   values: Values;
@@ -67,7 +89,9 @@ export type DealState = {
   arvMode: ArvSource;
   property: Property;
   notes: string;
-  // Where this deal came from (import metadata).
+  // Acquisition pipeline stage.
+  status: PipelineStatus;
+  // Where this property came from (import metadata).
   sourceType: SourceType;
   sourceUrl?: string;
   sourceFileName?: string;
@@ -144,6 +168,7 @@ export function emptyDealState(): DealState {
     arvMode: "manual",
     property: { ...EMPTY_PROPERTY },
     notes: "",
+    status: "analyzing",
     sourceType: "manual",
   };
 }
@@ -159,6 +184,7 @@ export function exampleDealState(): DealState {
     arvMode: "manual",
     property: { ...EXAMPLE_PROPERTY },
     notes: "",
+    status: "analyzing",
     sourceType: "manual",
   };
 }
@@ -381,6 +407,9 @@ export function sanitizeDealState(x: unknown): DealState {
       : "manual",
     property: sanitizeProperty(o.property),
     notes: typeof o.notes === "string" ? o.notes : "",
+    status: PIPELINE_STATUSES.some((s) => s.value === o.status)
+      ? (o.status as PipelineStatus)
+      : "analyzing",
     sourceType: (["manual", "link", "pdf", "csv"] as const).includes(
       o.sourceType as SourceType,
     )
@@ -504,7 +533,7 @@ export function dealTitle(deal: DealState): string {
   return (
     deal.property.name.trim() ||
     deal.property.address.trim() ||
-    "Untitled deal"
+    "Untitled property"
   );
 }
 
@@ -518,14 +547,27 @@ export type PortfolioSummary = {
   completeCount: number;
   avgScore: number;
   totalMonthlyCashFlow: number;
+  avgMonthlyCashFlow: number;
   totalEquityCreated: number;
+  statusCounts: Record<PipelineStatus, number>;
 };
 
-/** Aggregate stats across saved deals for the dashboard overview. */
+/** Aggregate stats across saved properties for the dashboard overview. */
 export function portfolioSummary(deals: DealState[]): PortfolioSummary {
   const metrics = deals.map(dealMetrics);
   const complete = metrics.filter((m) => m.hasDeal);
   const sumScore = complete.reduce((a, m) => a + m.score, 0);
+  const totalCf = complete.reduce((a, m) => a + m.monthlyCashFlow, 0);
+
+  const statusCounts = PIPELINE_STATUSES.reduce(
+    (acc, s) => {
+      acc[s.value] = 0;
+      return acc;
+    },
+    {} as Record<PipelineStatus, number>,
+  );
+  for (const d of deals) statusCounts[d.status]++;
+
   return {
     totalDeals: deals.length,
     buyCount: metrics.filter((m) => m.hasDeal && m.recommendation === "Buy")
@@ -537,8 +579,10 @@ export function portfolioSummary(deals: DealState[]): PortfolioSummary {
       .length,
     completeCount: complete.length,
     avgScore: complete.length ? Math.round(sumScore / complete.length) : 0,
-    totalMonthlyCashFlow: complete.reduce((a, m) => a + m.monthlyCashFlow, 0),
+    totalMonthlyCashFlow: totalCf,
+    avgMonthlyCashFlow: complete.length ? totalCf / complete.length : 0,
     totalEquityCreated: complete.reduce((a, m) => a + m.equityCreated, 0),
+    statusCounts,
   };
 }
 
@@ -665,7 +709,7 @@ export function makeSavedDeal(state: DealState): SavedDeal {
 export function duplicateDeal(deal: SavedDeal): SavedDeal {
   const now = Date.now();
   const copyName =
-    (deal.property.name.trim() || "Untitled deal") + " (Copy)";
+    (deal.property.name.trim() || "Untitled property") + " (Copy)";
   return {
     ...sanitizeDealState(deal),
     property: { ...deal.property, name: copyName },

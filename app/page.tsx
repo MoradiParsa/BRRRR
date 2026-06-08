@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   duplicateDeal as makeDuplicate,
-  emptyDealState,
   loadDeals,
   makeSavedDeal,
   saveDeals,
@@ -18,27 +17,20 @@ import {
   type SavedDeal,
 } from "@/lib/deals";
 import { DashboardHome } from "@/components/DashboardHome";
-import { SavedDeals } from "@/components/SavedDeals";
+import { AcquisitionPipeline } from "@/components/AcquisitionPipeline";
 import { Workspace, type WorkspaceHandle } from "@/components/Workspace";
 import { Compare } from "@/components/Compare";
-import { ImportProperty } from "@/components/ImportProperty";
+import { AddPropertyModal } from "@/components/AddPropertyModal";
 import { ComingSoon } from "@/components/ComingSoon";
 
-type View =
-  | "dashboard"
-  | "import"
-  | "saved"
-  | "compare"
-  | "portfolio"
-  | "settings";
+type View = "dashboard" | "pipeline" | "compare" | "portfolio" | "settings";
 
 type NavItem = { key: View; label: string; icon: ReactNode };
 
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: <IconGrid /> },
-  { key: "import", label: "Add Property", icon: <IconImport /> },
-  { key: "saved", label: "Saved Deals", icon: <IconStack /> },
-  { key: "compare", label: "Compare Deals", icon: <IconCompare /> },
+  { key: "pipeline", label: "Acquisition Pipeline", icon: <IconStack /> },
+  { key: "compare", label: "Compare", icon: <IconCompare /> },
   { key: "portfolio", label: "Portfolio", icon: <IconChart /> },
   { key: "settings", label: "Settings", icon: <IconGear /> },
 ];
@@ -65,6 +57,9 @@ export default function Home() {
 
   // Unsaved-changes modal state.
   const [pendingNav, setPendingNav] = useState<View | null>(null);
+
+  // Add Property modal.
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     setDeals(loadDeals());
@@ -99,17 +94,7 @@ export default function Home() {
 
   /* ------------------------------- opening ------------------------------- */
 
-  const openNew = () => {
-    setWorkspace({
-      mode: "new",
-      dealId: null,
-      deal: emptyDealState(),
-      savedAt: null,
-      returnView: view,
-    });
-    setWorkspaceKey((k) => k + 1);
-    setWorkspaceDirty(false);
-  };
+  const openAddModal = () => setShowAddModal(true);
 
   const openEdit = (id: string) => {
     const d = deals.find((x) => x.id === id);
@@ -125,14 +110,14 @@ export default function Home() {
     setWorkspaceDirty(false);
   };
 
-  // Open the workspace with an imported (or blank) draft — an unsaved new deal.
+  // Open the workspace with a new (blank or imported) draft — unsaved.
   const openDraft = (deal: DealState) => {
     setWorkspace({
       mode: "new",
       dealId: null,
       deal,
       savedAt: null,
-      returnView: "import",
+      returnView: view,
     });
     setWorkspaceKey((k) => k + 1);
     setWorkspaceDirty(false);
@@ -153,7 +138,7 @@ export default function Home() {
       dealId: first.id,
       deal: toDealState(first),
       savedAt: first.savedAt,
-      returnView: "saved",
+      returnView: "pipeline",
     });
     setWorkspaceKey((k) => k + 1);
     setWorkspaceDirty(false);
@@ -230,19 +215,12 @@ export default function Home() {
           onBack={() => requestNavigate(workspace.returnView)}
         />
       );
-    } else if (view === "import") {
+    } else if (view === "pipeline") {
       content = (
-        <ImportProperty
-          onCreateDraft={openDraft}
-          onImportDeals={importDeals}
-        />
-      );
-    } else if (view === "saved") {
-      content = (
-        <SavedDeals
+        <AcquisitionPipeline
           deals={deals}
           onOpen={openEdit}
-          onNew={openNew}
+          onAddProperty={openAddModal}
           onDuplicate={onDuplicate}
           onDelete={onDelete}
         />
@@ -267,9 +245,9 @@ export default function Home() {
       content = (
         <DashboardHome
           deals={deals}
-          onNew={openNew}
+          onAddProperty={openAddModal}
           onOpen={openEdit}
-          onViewAll={() => requestNavigate("saved")}
+          onViewAll={() => requestNavigate("pipeline")}
         />
       );
     }
@@ -337,6 +315,14 @@ export default function Home() {
         {/* Main content */}
         <div className="min-w-0 flex-1">{content}</div>
       </div>
+
+      {/* Add Property modal */}
+      <AddPropertyModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onCreateDraft={openDraft}
+        onImportDeals={importDeals}
+      />
 
       {/* Unsaved-changes modal */}
       {pendingNav && (
@@ -448,14 +434,6 @@ function IconStack() {
     <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor">
       <path d="M10 1l9 4-9 4-9-4 9-4z" />
       <path d="M1 9l9 4 9-4M1 13l9 4 9-4" opacity="0.5" />
-    </svg>
-  );
-}
-function IconImport() {
-  return (
-    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor">
-      <path d="M10 2a1 1 0 011 1v6.59l1.3-1.3a1 1 0 011.4 1.42l-3 3a1 1 0 01-1.4 0l-3-3a1 1 0 011.4-1.42l1.3 1.3V3a1 1 0 011-1z" />
-      <path d="M3 13a1 1 0 011 1v2h12v-2a1 1 0 112 0v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2a1 1 0 011-1z" />
     </svg>
   );
 }

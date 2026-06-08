@@ -12,27 +12,28 @@ import {
 import {
   dealMetrics,
   dealTitle,
+  PIPELINE_STATUSES,
+  statusLabel,
   type DealMetrics,
+  type PipelineStatus,
   type SavedDeal,
 } from "@/lib/deals";
 import { Stars } from "@/components/ui";
 
-type SortKey = "updated" | "cashflow" | "grade" | "arv" | "rent";
-type FilterKey = "all" | Recommendation;
+type SortKey = "updated" | "grade" | "cashflow" | "arv" | "price";
+type FilterKey = "all" | PipelineStatus;
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "updated", label: "Last Updated" },
-  { value: "cashflow", label: "Cash Flow" },
   { value: "grade", label: "Investment Grade" },
+  { value: "cashflow", label: "Cash Flow" },
   { value: "arv", label: "ARV" },
-  { value: "rent", label: "Monthly Rent" },
+  { value: "price", label: "Purchase Price" },
 ];
 
 const FILTERS: { value: FilterKey; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "Buy", label: "Buy" },
-  { value: "Buy with Caution", label: "Buy with Caution" },
-  { value: "Pass", label: "Pass" },
+  ...PIPELINE_STATUSES.map((s) => ({ value: s.value, label: s.label })),
 ];
 
 function gradeColor(g: InvestmentGrade): string {
@@ -50,16 +51,33 @@ function recColor(rec: Recommendation): string {
       : "text-red-600";
 }
 
-export function SavedDeals({
+export function statusColor(s: PipelineStatus): string {
+  switch (s) {
+    case "watching":
+      return "bg-slate-100 text-slate-600 ring-slate-200";
+    case "analyzing":
+      return "bg-indigo-100 text-indigo-700 ring-indigo-200";
+    case "offer_submitted":
+      return "bg-amber-100 text-amber-700 ring-amber-200";
+    case "under_contract":
+      return "bg-violet-100 text-violet-700 ring-violet-200";
+    case "owned":
+      return "bg-emerald-100 text-emerald-700 ring-emerald-200";
+    case "archived":
+      return "bg-slate-200 text-slate-500 ring-slate-300";
+  }
+}
+
+export function AcquisitionPipeline({
   deals,
   onOpen,
-  onNew,
+  onAddProperty,
   onDuplicate,
   onDelete,
 }: {
   deals: SavedDeal[];
   onOpen: (id: string) => void;
-  onNew: () => void;
+  onAddProperty: () => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -83,7 +101,7 @@ export function SavedDeals({
       );
     }
     if (filter !== "all") {
-      list = list.filter(({ metrics }) => metrics.recommendation === filter);
+      list = list.filter(({ deal }) => deal.status === filter);
     }
     const sorted = [...list];
     sorted.sort((a, b) => {
@@ -94,8 +112,8 @@ export function SavedDeals({
           return gradeRank(a.metrics.grade) - gradeRank(b.metrics.grade);
         case "arv":
           return b.metrics.arv - a.metrics.arv;
-        case "rent":
-          return b.metrics.monthlyRent - a.metrics.monthlyRent;
+        case "price":
+          return b.metrics.purchasePrice - a.metrics.purchasePrice;
         default:
           return b.deal.savedAt - a.deal.savedAt;
       }
@@ -105,28 +123,28 @@ export function SavedDeals({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Greeting + new deal */}
+      {/* Greeting + add property */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-medium text-indigo-600">Your pipeline</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
-            Saved Deals
+            Acquisition Pipeline
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             {deals.length === 0
               ? "Your acquisition pipeline starts here."
-              : `${deals.length} deal${deals.length === 1 ? "" : "s"} in your pipeline.`}
+              : `${deals.length} ${deals.length === 1 ? "property" : "properties"} in your pipeline.`}
           </p>
         </div>
         <button
           type="button"
-          onClick={onNew}
+          onClick={onAddProperty}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
         >
           <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
             <path d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" />
           </svg>
-          New Deal
+          Add Property
         </button>
       </div>
 
@@ -187,15 +205,15 @@ export function SavedDeals({
 
       {/* Cards / empty states */}
       {deals.length === 0 ? (
-        <EmptyDashboard onNew={onNew} />
+        <EmptyPipeline onAddProperty={onAddProperty} />
       ) : visible.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500">
-          No deals match your search or filters.
+          No properties match your search or filters.
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {visible.map(({ deal, metrics }) => (
-            <DealCard
+            <PropertyCard
               key={deal.id}
               deal={deal}
               metrics={metrics}
@@ -210,7 +228,7 @@ export function SavedDeals({
   );
 }
 
-function DealCard({
+function PropertyCard({
   deal,
   metrics,
   onOpen,
@@ -247,10 +265,17 @@ function DealCard({
         </span>
       </div>
 
-      {/* Recommendation + stars */}
-      <div className="mt-3 flex items-center justify-between">
-        <span className={`text-sm font-semibold ${recColor(metrics.recommendation)}`}>
-          {metrics.hasDeal ? metrics.recommendation : "Incomplete"}
+      {/* Status + recommendation + stars */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ring-1 ring-inset ${statusColor(deal.status)}`}
+          >
+            {statusLabel(deal.status)}
+          </span>
+          <span className={`text-sm font-semibold ${recColor(metrics.recommendation)}`}>
+            {metrics.hasDeal ? metrics.recommendation : "Incomplete"}
+          </span>
         </span>
         <span className="flex items-center gap-1.5">
           <Stars value={metrics.stars} size="sm" />
@@ -280,7 +305,7 @@ function DealCard({
           value={fmtPct(metrics.capitalRecoveryPct, 0)}
         />
         <Metric
-          label={surplus ? "Cash Out Surplus" : "Cash Left in Deal"}
+          label={surplus ? "Cash Out Surplus" : "Cash Left"}
           value={fmtUSD(surplus ? metrics.cashOutSurplus : metrics.cashLeftInDeal)}
           tone={surplus || metrics.cashLeftInDeal <= 0 ? "good" : "neutral"}
         />
@@ -411,7 +436,7 @@ function IconButton({
   );
 }
 
-function EmptyDashboard({ onNew }: { onNew: () => void }) {
+function EmptyPipeline({ onAddProperty }: { onAddProperty: () => void }) {
   return (
     <div className="mt-10 flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-16 text-center">
       <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
@@ -419,20 +444,22 @@ function EmptyDashboard({ onNew }: { onNew: () => void }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
       </span>
-      <h3 className="mt-5 text-lg font-bold text-slate-800">No deals yet</h3>
+      <h3 className="mt-5 text-lg font-bold text-slate-800">
+        No properties yet
+      </h3>
       <p className="mt-1 max-w-sm text-sm text-slate-500">
-        Create your first deal to start analyzing acquisitions, comparing
-        properties, and building your portfolio.
+        Add your first property to start analyzing acquisitions, comparing
+        opportunities, and building your portfolio.
       </p>
       <button
         type="button"
-        onClick={onNew}
+        onClick={onAddProperty}
         className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
       >
         <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
           <path d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" />
         </svg>
-        Create your first deal
+        Add Property
       </button>
     </div>
   );
