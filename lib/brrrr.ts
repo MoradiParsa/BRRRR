@@ -987,6 +987,40 @@ export function arvForSource(
   }
 }
 
+/* ----------------------------- investment grade --------------------------- */
+
+export const INVESTMENT_GRADES = [
+  "A+",
+  "A",
+  "A-",
+  "B+",
+  "B",
+  "C",
+  "Pass",
+] as const;
+export type InvestmentGrade = (typeof INVESTMENT_GRADES)[number];
+
+/** Map the 0–100 deal score (and recommendation) to a letter grade. */
+export function investmentGrade(
+  score: number,
+  rec: Recommendation,
+): InvestmentGrade {
+  if (rec === "Pass") return "Pass";
+  if (score >= 90) return "A+";
+  if (score >= 83) return "A";
+  if (score >= 76) return "A-";
+  if (score >= 68) return "B+";
+  if (score >= 60) return "B";
+  if (score >= 50) return "C";
+  return "Pass";
+}
+
+/** Sort key: lower is a better grade (A+ = 0). */
+export function gradeRank(g: string): number {
+  const i = INVESTMENT_GRADES.indexOf(g as InvestmentGrade);
+  return i === -1 ? INVESTMENT_GRADES.length : i;
+}
+
 /* --------------------------------- format --------------------------------- */
 
 export const fmtUSD = (n: number, digits = 0) =>
