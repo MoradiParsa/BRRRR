@@ -6,7 +6,6 @@ import {
   csvRowToDealState,
   csvToPreviewRows,
   emptyDealState,
-  linkDealState,
   pdfDealState,
   type CsvRow,
   type DealState,
@@ -14,10 +13,17 @@ import {
 import { IMPORT_SOURCES } from "@/lib/importers";
 import {
   ACCEPTED_FILE_TYPES,
+  CSV_IMPORT_TIP,
   extractProperty,
   type PropertyExtractionResult,
 } from "@/lib/extraction";
+import {
+  blankDealStateWithLink,
+  failedUrlResult,
+  type UrlExtractionResult,
+} from "@/lib/urlImport";
 import { ExtractionReview } from "@/components/ExtractionReview";
+import { LinkExtractionReview } from "@/components/LinkExtractionReview";
 
 /**
  * Premium "Add Property" modal. The methods are driven by the IMPORT_SOURCES
@@ -38,6 +44,8 @@ export function AddPropertyModal({
 }) {
   const [extracting, setExtracting] = useState(false);
   const [review, setReview] = useState<PropertyExtractionResult | null>(null);
+  const [linkExtracting, setLinkExtracting] = useState(false);
+  const [linkReview, setLinkReview] = useState<UrlExtractionResult | null>(null);
 
   if (!open) return null;
 
@@ -47,6 +55,8 @@ export function AddPropertyModal({
   const close = () => {
     setReview(null);
     setExtracting(false);
+    setLinkReview(null);
+    setLinkExtracting(false);
     onClose();
   };
 
@@ -57,6 +67,38 @@ export function AddPropertyModal({
       setReview(result);
     } finally {
       setExtracting(false);
+    }
+  };
+
+  // Basic listing-URL extraction via the /api/import-url route. Always lands on
+  // a review screen — even on failure — so the user can attach the link.
+  const runLinkExtraction = async (url: string) => {
+    setLinkExtracting(true);
+    try {
+      const res = await fetch("/api/import-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setLinkReview(
+          failedUrlResult(url, [
+            (data && data.error) ||
+              "We couldn't process that link. You can still create a blank property with it attached.",
+          ]),
+        );
+        return;
+      }
+      setLinkReview((await res.json()) as UrlExtractionResult);
+    } catch {
+      setLinkReview(
+        failedUrlResult(url, [
+          "We couldn't reach that link. You can still create a blank property with it attached.",
+        ]),
+      );
+    } finally {
+      setLinkExtracting(false);
     }
   };
 
@@ -78,7 +120,7 @@ export function AddPropertyModal({
               Add Property
             </h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              {review
+              {review || linkReview
                 ? "Review the details we found before creating the property."
                 : "Choose how you want to add a property."}
             </p>
@@ -110,6 +152,19 @@ export function AddPropertyModal({
                 close();
               }}
             />
+          ) : linkReview ? (
+            <LinkExtractionReview
+              result={linkReview}
+              onCreateExtracted={(deal) => {
+                onCreateDraft(deal);
+                close();
+              }}
+              onCreateBlank={() => {
+                onCreateDraft(blankDealStateWithLink(linkReview.url));
+                close();
+              }}
+              onCancel={() => setLinkReview(null)}
+            />
           ) : (
             <>
               <Section title="Working now" tone="now">
@@ -132,6 +187,13 @@ export function AddPropertyModal({
                         close();
                       }}
                     />
+                  ) : src.kind === "link" ? (
+                    <LinkImportCard
+                      key={src.id}
+                      description={src.description}
+                      extracting={linkExtracting}
+                      onExtract={runLinkExtraction}
+                    />
                   ) : (
                     <PdfCard
                       key={src.id}
@@ -143,18 +205,21 @@ export function AddPropertyModal({
                 )}
               </Section>
 
-              <Section title="Coming soon" tone="soon">
-                {soon.map((src) => (
-                  <LinkCard
-                    key={src.id}
-                    description={src.description}
-                    onCreate={(deal) => {
-                      onCreateDraft(deal);
-                      close();
-                    }}
-                  />
-                ))}
-              </Section>
+              {soon.length > 0 && (
+                <Section title="Coming soon" tone="soon">
+                  {soon.map((src) => (
+                    <Card
+                      key={src.id}
+                      icon={<IconLink />}
+                      title={src.label}
+                      description={src.description}
+                      badge={{ label: "Soon", tone: "soon" }}
+                    >
+                      <span className="text-xs text-slate-400">Coming soon.</span>
+                    </Card>
+                  ))}
+                </Section>
+              )}
             </>
           )}
         </div>
@@ -385,23 +450,24 @@ function CsvCard({
   );
 }
 
-function LinkCard({
+function LinkImportCard({
   description,
-  onCreate,
+  extracting,
+  onExtract,
 }: {
   description: string;
-  onCreate: (deal: DealState) => void;
+  extracting: boolean;
+  onExtract: (url: string) => void;
 }) {
   const [url, setUrl] = useState("");
-  const [notes, setNotes] = useState("");
-  const valid = url.trim().length > 0;
+  const valid = /^https?:\/\/.+\..+/i.test(url.trim());
 
   return (
     <Card
       icon={<IconLink />}
       title="Paste Listing URL"
       description={description}
-      badge={{ label: "Soon", tone: "soon" }}
+      badge={{ label: "Basic", tone: "working" }}
     >
       <input
         type="url"
@@ -409,23 +475,26 @@ function LinkCard({
         onChange={(e) => setUrl(e.target.value)}
         placeholder="https://www.zillow.com/homedetails/…"
         className={inputClass}
+        disabled={extracting}
       />
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        rows={2}
-        placeholder="Notes (optional)…"
-        className={`${inputClass} mt-2 resize-y`}
-      />
-      <p className="mt-2 text-xs font-medium text-amber-700">
-        Automatic extraction coming soon.
+      <p className="mt-2 text-xs text-slate-500">
+        Reads public HTML, meta tags, and structured data — no login, no
+        automation, no paid service. Some sites block automated requests; if so,
+        you can still create a blank property with the link.
       </p>
       <PrimaryButton
         className="mt-2"
-        disabled={!valid}
-        onClick={() => onCreate(linkDealState(url, notes))}
+        disabled={!valid || extracting}
+        onClick={() => onExtract(url.trim())}
       >
-        Save Link &amp; Create Property
+        {extracting ? (
+          <span className="inline-flex items-center justify-center gap-2">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            Attempting basic link extraction…
+          </span>
+        ) : (
+          "Extract from Link"
+        )}
       </PrimaryButton>
     </Card>
   );
@@ -447,7 +516,7 @@ function PdfCard({
       icon={<IconDoc />}
       title="Upload PDF / Flyer"
       description={description}
-      badge={{ label: "Beta", tone: "working" }}
+      badge={{ label: "Local only", tone: "soon" }}
     >
       <input
         ref={inputRef}
@@ -478,9 +547,17 @@ function PdfCard({
           </>
         )}
       </button>
-      <p className="mt-2 text-xs text-slate-500">
-        Local text extraction from PDFs. Scanned files &amp; images need OCR
-        (coming soon) — you can still review and edit before creating.
+      <p className="mt-2 text-xs font-semibold text-slate-600">
+        Basic local extraction only
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        Reads text from text-based PDFs in your browser — no AI, no paid service.
+        Scanned PDFs and images can&apos;t be read (image OCR is not available
+        without an AI/OCR service). You review and edit every field before
+        creating.
+      </p>
+      <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+        {CSV_IMPORT_TIP}
       </p>
     </Card>
   );

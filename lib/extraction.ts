@@ -132,7 +132,7 @@ function composeCityState(f: ExtractedFields): string {
   return city || tail;
 }
 
-function composeNotes(f: ExtractedFields, fileName: string): string {
+function composeNotes(f: ExtractedFields, originLabel: string): string {
   const lines: string[] = [];
   if (f.description.trim()) lines.push(f.description.trim());
   const facts: string[] = [];
@@ -144,14 +144,23 @@ function composeNotes(f: ExtractedFields, fileName: string): string {
     .filter(Boolean)
     .join(" · ");
   if (agent) lines.push(`Listing agent: ${agent}`);
-  lines.push(`Imported from ${fileName}`);
+  if (originLabel) lines.push(`Imported from ${originLabel}`);
   return lines.join("\n\n");
 }
 
-/** Build a full property from reviewed fields (deep-merged onto a blank deal). */
-export function dealStateFromExtracted(
+/** Where an extracted property came from — drives source metadata + the notes
+ *  footer. Lets PDF, URL, and future providers share one builder. */
+export type ExtractionOrigin = {
+  sourceType: DealState["sourceType"];
+  originLabel: string;
+  sourceUrl?: string;
+  sourceFileName?: string;
+};
+
+/** Build a full property from reviewed fields, tagged with its import source. */
+export function dealStateFromExtractedSource(
   f: ExtractedFields,
-  fileName: string,
+  origin: ExtractionOrigin,
 ): DealState {
   const base = emptyDealState();
   const beds = toNum(f.beds);
@@ -174,12 +183,25 @@ export function dealStateFromExtracted(
       baths,
       sqft,
     },
-    notes: composeNotes(f, fileName),
+    notes: composeNotes(f, origin.originLabel),
     status: "analyzing",
-    sourceType: "pdf",
-    sourceFileName: fileName,
+    sourceType: origin.sourceType,
+    sourceUrl: origin.sourceUrl,
+    sourceFileName: origin.sourceFileName,
     importedAt: Date.now(),
   };
+}
+
+/** PDF/flyer convenience wrapper (behavior unchanged). */
+export function dealStateFromExtracted(
+  f: ExtractedFields,
+  fileName: string,
+): DealState {
+  return dealStateFromExtractedSource(f, {
+    sourceType: "pdf",
+    originLabel: fileName,
+    sourceFileName: fileName,
+  });
 }
 
 /* ------------------------------ PDF text read ----------------------------- */
@@ -503,6 +525,10 @@ const isImage = (file: File) =>
 const isPdf = (file: File) =>
   /\.pdf$/i.test(file.name) || file.type === "application/pdf";
 
+/** Shown wherever local extraction comes up short — points at the free path. */
+export const CSV_IMPORT_TIP =
+  "For free importing, use MLS/Zillow/Redfin CSV exports when available.";
+
 export const localPdfExtractor: FileExtractor = {
   id: "local-pdf",
   label: "Local PDF text reader",
@@ -516,7 +542,8 @@ export const localPdfExtractor: FileExtractor = {
         emptyExtractedFields(),
         {},
         [
-          "We couldn't read this PDF locally. It may be scanned or image-based — automatic reading of those needs OCR (coming soon).",
+          "We couldn't read this PDF with basic local extraction. It may be scanned or image-based, which needs an AI/OCR service that isn't enabled.",
+          CSV_IMPORT_TIP,
         ],
         undefined,
         file.name,
@@ -529,7 +556,8 @@ export const localPdfExtractor: FileExtractor = {
         emptyExtractedFields(),
         {},
         [
-          "This PDF has little selectable text — it's likely scanned or image-based. OCR-based reading is coming soon.",
+          "This PDF has little selectable text — it's likely scanned or image-based. Reading those needs an AI/OCR service, which isn't enabled.",
+          CSV_IMPORT_TIP,
         ],
         rawText,
         file.name,
@@ -557,7 +585,8 @@ export const imageExtractor: FileExtractor = {
       emptyExtractedFields(),
       {},
       [
-        "Reading text from images requires OCR, which isn't available locally yet. You can enter the details manually below or attach the file to a blank property.",
+        "Image OCR is not available without an AI/OCR service.",
+        CSV_IMPORT_TIP,
       ],
       undefined,
       file.name,
@@ -567,11 +596,14 @@ export const imageExtractor: FileExtractor = {
 };
 
 /**
- * Future extractors slot in here (and take priority over local ones):
- *   - openAiExtractor / claudeExtractor (LLM extraction, needs API key)
- *   - ocrExtractor (Tesseract / cloud OCR for scanned PDFs + images)
- *   - mlsExtractor / zillowExtractor (provider APIs)
- * They implement FileExtractor and never change the Property model.
+ * Registry — dispatched in order by the first extractor that `canHandle`s the
+ * file. Only free, local extractors are active: text-based PDFs are parsed in
+ * the browser; images and scanned PDFs return a "limited" result (no paid API).
+ *
+ * To add paid/remote extraction later (LLM, cloud OCR, MLS/Zillow/Redfin APIs),
+ * implement `FileExtractor` and register it here — typically ahead of the local
+ * ones so it takes priority. Nothing downstream (Property model, review UI)
+ * changes. The architecture stays modular; only this list is edited.
  */
 export const EXTRACTORS: FileExtractor[] = [localPdfExtractor, imageExtractor];
 

@@ -73,9 +73,10 @@ export const IMPORT_SOURCES: ImportSource[] = [
   {
     id: "link",
     label: "Paste Listing URL",
-    description: "Save a Zillow, Redfin, Realtor, or MLS link to a property.",
+    description:
+      "Basic extraction from a Zillow, Redfin, Realtor, or MLS listing URL.",
     kind: "link",
-    status: "coming-soon",
+    status: "working",
   },
 ];
 
