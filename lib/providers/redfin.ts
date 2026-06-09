@@ -3,9 +3,13 @@
  * here will frequently 404/`blocked`/`empty`; that degrades gracefully and the
  * future browser-automation provider is the path to real Redfin data. */
 
-import { createStaticSiteProvider, cityStateSlug } from "./staticSite";
+import {
+  createStaticSiteProvider,
+  cityStateSlug,
+  type StaticSiteConfig,
+} from "./staticSite";
 
-export const redfinProvider = createStaticSiteProvider({
+export const redfinSite: StaticSiteConfig = {
   id: "redfin",
   label: "Redfin",
   origin: "https://www.redfin.com",
@@ -13,4 +17,6 @@ export const redfinProvider = createStaticSiteProvider({
   // Redfin uses /city/<id>/<ST>/<City>; without the id we attempt a city slug.
   buildSearchUrl: (q) => `https://www.redfin.com/city/${cityStateSlug(q.market, "-")}`,
   detailUrlRe: /\/[A-Z]{2}\/[A-Za-z0-9\-]+\/[^"'\\<>\s]*\/home\/\d+/,
-});
+};
+
+export const redfinProvider = createStaticSiteProvider(redfinSite);

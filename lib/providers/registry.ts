@@ -23,6 +23,7 @@ import { redfinProvider } from "./redfin";
 import { realtorProvider } from "./realtor";
 import { csvProvider } from "./csv";
 import { pdfProvider } from "./pdf";
+import { browserProvider } from "./browser";
 import type {
   FileProvider,
   PropertyProvider,
@@ -49,21 +50,13 @@ const unavailableSearch = (
   },
 });
 
-/** FUTURE PRIMARY: opens the page in a real browser, waits for render, extracts,
- *  closes, returns normalized properties. Register the real impl at priority 10. */
-export const browserAutomationSlot = unavailableSearch(
-  "browser",
-  "Browser automation",
-  10,
-);
-
 /** FUTURE: MLS feed / API. */
 export const mlsSlot = unavailableSearch("mls", "MLS", 30);
 
 /* ------------------------------- the registry ----------------------------- */
 
 export const PROPERTY_PROVIDERS: PropertyProvider[] = [
-  browserAutomationSlot,
+  browserProvider,
   zillowProvider,
   redfinProvider,
   realtorProvider,
@@ -72,10 +65,19 @@ export const PROPERTY_PROVIDERS: PropertyProvider[] = [
   pdfProvider,
 ].sort((a, b) => a.priority - b.priority);
 
+const STATIC_PORTAL_IDS = new Set(["zillow", "redfin", "realtor"]);
+
 export function getActiveSearchProviders(): SearchProvider[] {
-  return PROPERTY_PROVIDERS.filter(
+  const active = PROPERTY_PROVIDERS.filter(
     (p): p is SearchProvider => p.kind === "search" && p.isAvailable(),
   );
+  // When the browser provider is enabled it is the single portal provider —
+  // drop the static Zillow/Redfin/Realtor fetchers so we don't hit those sites
+  // twice. They automatically return when SCANNER_BROWSER is unset.
+  if (active.some((p) => p.id === "browser")) {
+    return active.filter((p) => p.id === "browser" || !STATIC_PORTAL_IDS.has(p.id));
+  }
+  return active;
 }
 
 export function getActiveFileProviders(): FileProvider[] {

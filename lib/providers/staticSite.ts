@@ -32,7 +32,7 @@ export type StaticSiteConfig = {
   detailUrlRe: RegExp;
 };
 
-const BLOCK_MARKERS =
+export const BLOCK_MARKERS =
   /(px-captcha|perimeterx|access to this page has been denied|please verify you are a human|request unsuccessful|incapsula|\/recaptcha\/|are you a robot|unusual traffic)/i;
 
 const toInt = (s: string): number | null => {
@@ -66,7 +66,7 @@ export function cityStateSlug(market: string, joiner = "-"): string {
 }
 
 /** Collect candidate listing-detail URLs from the search HTML. */
-function collectDetailUrls(
+export function collectDetailUrls(
   html: string,
   cfg: StaticSiteConfig,
   cap: number,
@@ -129,7 +129,10 @@ async function mapPool<T, R>(
   return out;
 }
 
-function toScannedProperty(
+/** Map fetched/rendered listing HTML to a normalized ScannedProperty. Shared by
+ *  the static fetch providers and the browser-automation provider (which passes
+ *  Playwright-rendered HTML), so both emit identical ScannedProperty shapes. */
+export function htmlToScannedProperty(
   html: string,
   url: string,
   cfg: StaticSiteConfig,
@@ -229,7 +232,7 @@ export function createStaticSiteProvider(cfg: StaticSiteConfig): SearchProvider 
         const page = pages[k];
         if (!page || !page.ok) continue;
         if (BLOCK_MARKERS.test(page.html.slice(0, 20000))) continue;
-        const sp = toScannedProperty(page.html, urls[k], cfg, now);
+        const sp = htmlToScannedProperty(page.html, urls[k], cfg, now);
         if (sp) properties.push(sp);
       }
 

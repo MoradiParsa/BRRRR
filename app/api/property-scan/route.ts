@@ -20,10 +20,12 @@ import type {
 } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Browser-automation scans (Playwright) render many pages, so allow more time
+// than the static-fetch path needs. Static-only scans still finish fast.
+export const maxDuration = 120;
 
 const PER_FETCH_TIMEOUT_MS = 12_000;
-const GLOBAL_BUDGET_MS = 50_000;
+const GLOBAL_BUDGET_MS = 110_000;
 const MAX_HTML_BYTES = 3_000_000;
 
 const USER_AGENT =
