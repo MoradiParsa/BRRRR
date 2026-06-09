@@ -12,11 +12,18 @@ import {
   type DealState,
 } from "@/lib/deals";
 import { IMPORT_SOURCES } from "@/lib/importers";
+import {
+  ACCEPTED_FILE_TYPES,
+  extractProperty,
+  type PropertyExtractionResult,
+} from "@/lib/extraction";
+import { ExtractionReview } from "@/components/ExtractionReview";
 
 /**
- * Premium "Add Property" modal. The four methods are driven by the
- * IMPORT_SOURCES registry (lib/importers.ts) so new sources can be added later
- * without touching this layout or the Property model.
+ * Premium "Add Property" modal. The methods are driven by the IMPORT_SOURCES
+ * registry (lib/importers.ts) so new sources can be added later without
+ * touching this layout or the Property model. PDF/flyer uploads run the local
+ * extractor (lib/extraction.ts) and open an editable review.
  */
 export function AddPropertyModal({
   open,
@@ -29,17 +36,36 @@ export function AddPropertyModal({
   onCreateDraft: (deal: DealState) => void;
   onImportDeals: (deals: DealState[]) => void;
 }) {
+  const [extracting, setExtracting] = useState(false);
+  const [review, setReview] = useState<PropertyExtractionResult | null>(null);
+
   if (!open) return null;
 
   const working = IMPORT_SOURCES.filter((s) => s.status === "working");
   const soon = IMPORT_SOURCES.filter((s) => s.status === "coming-soon");
+
+  const close = () => {
+    setReview(null);
+    setExtracting(false);
+    onClose();
+  };
+
+  const runExtraction = async (file: File) => {
+    setExtracting(true);
+    try {
+      const result = await extractProperty(file);
+      setReview(result);
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center"
       role="dialog"
       aria-modal="true"
-      onClick={onClose}
+      onClick={close}
     >
       <div
         className="my-4 w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
@@ -52,12 +78,14 @@ export function AddPropertyModal({
               Add Property
             </h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              Choose how you want to add a property.
+              {review
+                ? "Review the details we found before creating the property."
+                : "Choose how you want to add a property."}
             </p>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             aria-label="Close"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           >
@@ -68,54 +96,67 @@ export function AddPropertyModal({
         </div>
 
         {/* Body */}
-        <div className="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
-          <Section title="Working now" tone="now">
-            {working.map((src) =>
-              src.kind === "manual" ? (
-                <ManualCard
-                  key={src.id}
-                  description={src.description}
-                  onCreate={() => {
-                    onCreateDraft(emptyDealState());
-                    onClose();
-                  }}
-                />
-              ) : (
-                <CsvCard
-                  key={src.id}
-                  description={src.description}
-                  onImport={(deals) => {
-                    onImportDeals(deals);
-                    onClose();
-                  }}
-                />
-              ),
-            )}
-          </Section>
+        <div className="max-h-[72vh] space-y-6 overflow-y-auto px-6 py-5">
+          {review ? (
+            <ExtractionReview
+              result={review}
+              onBack={() => setReview(null)}
+              onCreate={(deal) => {
+                onCreateDraft(deal);
+                close();
+              }}
+              onCreateBlank={() => {
+                onCreateDraft(pdfDealState(review.fileName));
+                close();
+              }}
+            />
+          ) : (
+            <>
+              <Section title="Working now" tone="now">
+                {working.map((src) =>
+                  src.kind === "manual" ? (
+                    <ManualCard
+                      key={src.id}
+                      description={src.description}
+                      onCreate={() => {
+                        onCreateDraft(emptyDealState());
+                        close();
+                      }}
+                    />
+                  ) : src.kind === "csv" ? (
+                    <CsvCard
+                      key={src.id}
+                      description={src.description}
+                      onImport={(deals) => {
+                        onImportDeals(deals);
+                        close();
+                      }}
+                    />
+                  ) : (
+                    <PdfCard
+                      key={src.id}
+                      description={src.description}
+                      extracting={extracting}
+                      onFile={runExtraction}
+                    />
+                  ),
+                )}
+              </Section>
 
-          <Section title="Coming soon" tone="soon">
-            {soon.map((src) =>
-              src.kind === "link" ? (
-                <LinkCard
-                  key={src.id}
-                  description={src.description}
-                  onCreate={(deal) => {
-                    onCreateDraft(deal);
-                    onClose();
-                  }}
-                />
-              ) : (
-                <PdfCard
-                  key={src.id}
-                  description={src.description}
-                  onCreate={(deal) => {
-                    onCreateDraft(deal);
-                    onClose();
-                  }}
-                />
-              ),
-            )}
-          </Section>
+              <Section title="Coming soon" tone="soon">
+                {soon.map((src) => (
+                  <LinkCard
+                    key={src.id}
+                    description={src.description}
+                    onCreate={(deal) => {
+                      onCreateDraft(deal);
+                      close();
+                    }}
+                  />
+                ))}
+              </Section>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -392,12 +433,13 @@ function LinkCard({
 
 function PdfCard({
   description,
-  onCreate,
+  extracting,
+  onFile,
 }: {
   description: string;
-  onCreate: (deal: DealState) => void;
+  extracting: boolean;
+  onFile: (file: File) => void;
 }) {
-  const [fileName, setFileName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -405,36 +447,41 @@ function PdfCard({
       icon={<IconDoc />}
       title="Upload PDF / Flyer"
       description={description}
-      badge={{ label: "Soon", tone: "soon" }}
+      badge={{ label: "Beta", tone: "working" }}
     >
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,image/*"
+        accept={ACCEPTED_FILE_TYPES}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) setFileName(f.name);
+          if (f) onFile(f);
+          e.target.value = "";
         }}
       />
       <button
         type="button"
+        disabled={extracting}
         onClick={() => inputRef.current?.click()}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50/40"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50/40 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <IconDoc />
-        {fileName ?? "Choose a PDF or image"}
+        {extracting ? (
+          <>
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-500" />
+            Reading file…
+          </>
+        ) : (
+          <>
+            <IconDoc />
+            Choose a PDF, flyer, or image
+          </>
+        )}
       </button>
-      <p className="mt-2 text-xs font-medium text-amber-700">
-        Automatic PDF extraction coming soon.
+      <p className="mt-2 text-xs text-slate-500">
+        Local text extraction from PDFs. Scanned files &amp; images need OCR
+        (coming soon) — you can still review and edit before creating.
       </p>
-      <PrimaryButton
-        className="mt-2"
-        disabled={!fileName}
-        onClick={() => fileName && onCreate(pdfDealState(fileName))}
-      >
-        Save Source &amp; Create Property
-      </PrimaryButton>
     </Card>
   );
 }

@@ -64,17 +64,17 @@ export const IMPORT_SOURCES: ImportSource[] = [
     status: "working",
   },
   {
+    id: "pdf",
+    label: "Upload PDF / Flyer",
+    description: "Extract details from a PDF, flyer, MLS sheet, or image.",
+    kind: "pdf",
+    status: "working",
+  },
+  {
     id: "link",
     label: "Paste Listing URL",
     description: "Save a Zillow, Redfin, Realtor, or MLS link to a property.",
     kind: "link",
-    status: "coming-soon",
-  },
-  {
-    id: "pdf",
-    label: "Upload PDF / Flyer",
-    description: "Attach an MLS flyer or offering memorandum.",
-    kind: "pdf",
     status: "coming-soon",
   },
 ];
