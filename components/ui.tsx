@@ -1,7 +1,31 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { fmtUSD, type CostMode } from "@/lib/brrrr";
+import {
+  fmtUSD,
+  type CostMode,
+  type InvestmentGrade,
+  type Recommendation,
+} from "@/lib/brrrr";
+
+/* ------------------------------- grade colors ----------------------------- */
+/* Shared chip styling for investment grade + recommendation, reused by the    */
+/* Pipeline, Deal Queue, and Scanner.                                          */
+
+export function gradeColor(g: InvestmentGrade): string {
+  if (g === "Pass") return "bg-red-100 text-red-700 ring-red-200";
+  if (g.startsWith("A")) return "bg-emerald-100 text-emerald-700 ring-emerald-200";
+  if (g.startsWith("B")) return "bg-sky-100 text-sky-700 ring-sky-200";
+  return "bg-amber-100 text-amber-700 ring-amber-200";
+}
+
+export function recColor(rec: Recommendation): string {
+  return rec === "Buy"
+    ? "text-emerald-600"
+    : rec === "Buy with Caution"
+      ? "text-amber-600"
+      : "text-red-600";
+}
 
 /* --------------------------------- Stars ---------------------------------- */
 

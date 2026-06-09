@@ -22,15 +22,36 @@ import { Workspace, type WorkspaceHandle } from "@/components/Workspace";
 import { Compare } from "@/components/Compare";
 import { AddPropertyModal } from "@/components/AddPropertyModal";
 import { ComingSoon } from "@/components/ComingSoon";
+import { PropertyScanner } from "@/components/PropertyScanner";
+import { DealQueue } from "@/components/DealQueue";
+import {
+  loadQueue,
+  markPromoted,
+  mergeScanIntoQueue,
+  removeItem,
+  saveQueue,
+  setItemStatus,
+  type QueueItem,
+} from "@/lib/dealQueue";
+import type { ScanRow } from "@/lib/scanner";
 
-type View = "dashboard" | "pipeline" | "compare" | "portfolio" | "settings";
+type View =
+  | "dashboard"
+  | "scanner"
+  | "queue"
+  | "pipeline"
+  | "compare"
+  | "portfolio"
+  | "settings";
 
 type NavItem = { key: View; label: string; icon: ReactNode };
 
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: <IconGrid /> },
+  { key: "scanner", label: "Universal Property Scanner", icon: <IconRadar /> },
+  { key: "queue", label: "Deal Queue", icon: <IconInbox /> },
   { key: "pipeline", label: "Acquisition Pipeline", icon: <IconStack /> },
-  { key: "compare", label: "Compare", icon: <IconCompare /> },
+  { key: "compare", label: "Compare Deals", icon: <IconCompare /> },
   { key: "portfolio", label: "Portfolio", icon: <IconChart /> },
   { key: "settings", label: "Settings", icon: <IconGear /> },
 ];
@@ -45,6 +66,7 @@ type WorkspaceInit = {
 
 export default function Home() {
   const [deals, setDeals] = useState<SavedDeal[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const [view, setView] = useState<View>("dashboard");
   const [ready, setReady] = useState(false);
 
@@ -63,6 +85,7 @@ export default function Home() {
 
   useEffect(() => {
     setDeals(loadDeals());
+    setQueue(loadQueue());
     setReady(true);
   }, []);
 
@@ -162,6 +185,49 @@ export default function Home() {
     });
   };
 
+  /* ------------------------------ deal queue ----------------------------- */
+
+  const updateQueue = useCallback(
+    (updater: (prev: QueueItem[]) => QueueItem[]) => {
+      setQueue((prev) => {
+        const next = updater(prev);
+        saveQueue(next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  // Scanner found matches → merge into the queue (dedupe + price tracking).
+  const onMergeScan = useCallback(
+    (rows: ScanRow[]) => updateQueue((q) => mergeScanIntoQueue(q, rows)),
+    [updateQueue],
+  );
+
+  const onQueueIgnore = (id: string) =>
+    updateQueue((q) => setItemStatus(q, id, "ignored"));
+  const onQueueWatch = (id: string) =>
+    updateQueue((q) => setItemStatus(q, id, "watching"));
+  const onQueueRestore = (id: string) =>
+    updateQueue((q) => setItemStatus(q, id, "new"));
+  const onQueueRemove = (id: string) => updateQueue((q) => removeItem(q, id));
+
+  // Analyze → open the Workspace draft; the queue item is parked as "analyzing".
+  const onQueueAnalyze = (item: QueueItem) => {
+    updateQueue((q) => setItemStatus(q, item.id, "analyzing"));
+    openDraft(item.deal);
+  };
+
+  // Add to Pipeline → persist a pursued deal and mark the queue item promoted.
+  const onQueueAddToPipeline = (item: QueueItem) => {
+    const id = onPersistNew({ ...item.deal, status: "analyzing" });
+    updateQueue((q) => markPromoted(q, item.id, id));
+  };
+
+  const inboxCount = queue.filter(
+    (q) => q.queueStatus !== "ignored" && q.queueStatus !== "promoted",
+  ).length;
+
   /* ----------------------------- navigation ------------------------------ */
 
   const leaveWorkspace = (target: View) => {
@@ -213,6 +279,27 @@ export default function Home() {
           onPersistExisting={onPersistExisting}
           onDirtyChange={onDirtyChange}
           onBack={() => requestNavigate(workspace.returnView)}
+        />
+      );
+    } else if (view === "scanner") {
+      content = (
+        <PropertyScanner
+          onMergeScan={onMergeScan}
+          onGoToQueue={() => requestNavigate("queue")}
+          queueCount={inboxCount}
+        />
+      );
+    } else if (view === "queue") {
+      content = (
+        <DealQueue
+          items={queue}
+          onIgnore={onQueueIgnore}
+          onWatch={onQueueWatch}
+          onAnalyze={onQueueAnalyze}
+          onAddToPipeline={onQueueAddToPipeline}
+          onRestore={onQueueRestore}
+          onRemove={onQueueRemove}
+          onGoToScanner={() => requestNavigate("scanner")}
         />
       );
     } else if (view === "pipeline") {
@@ -434,6 +521,25 @@ function IconStack() {
     <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor">
       <path d="M10 1l9 4-9 4-9-4 9-4z" />
       <path d="M1 9l9 4 9-4M1 13l9 4 9-4" opacity="0.5" />
+    </svg>
+  );
+}
+function IconRadar() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <circle cx="10" cy="10" r="2.5" />
+      <path strokeLinecap="round" d="M10 10l5-3M10 4.5a5.5 5.5 0 105.2 3.7M10 1.5a8.5 8.5 0 108 5.6" />
+    </svg>
+  );
+}
+function IconInbox() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm-.1 9h3.05a1 1 0 01.95.68 2.2 2.2 0 004.2 0 1 1 0 01.95-.68H16.1L14.7 6.3A1 1 0 0013.74 5.5H6.26a1 1 0 00-.96.8L3.9 12z"
+        clipRule="evenodd"
+      />
     </svg>
   );
 }

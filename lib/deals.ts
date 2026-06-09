@@ -78,6 +78,20 @@ export function statusLabel(s: PipelineStatus): string {
   return PIPELINE_STATUSES.find((x) => x.value === s)?.label ?? "Analyzing";
 }
 
+/**
+ * Price-history / sighting tracking maintained across scans (scanner-sourced
+ * properties). Lets future scans surface price drops and motivated sellers.
+ * Stored on DealState so it survives promotion into the pipeline.
+ */
+export type PropertyTracking = {
+  firstSeen: number;
+  lastSeen: number;
+  lastScan: number;
+  previousPrice: number | null;
+  currentPrice: number | null;
+  priceChange: number | null;
+};
+
 /** Everything the workspace edits for one property. */
 export type DealState = {
   values: Values;
@@ -97,6 +111,11 @@ export type DealState = {
   sourceFileName?: string;
   sourceNotes?: string;
   importedAt?: number;
+  // Listing photos captured at import — saved now for future renovation /
+  // rehab / ARV modules (no analysis is performed on them yet).
+  photoUrls?: string[];
+  // Price-history tracking for scanner-sourced properties.
+  tracking?: PropertyTracking;
 };
 
 export type SavedDeal = DealState & {
@@ -170,7 +189,30 @@ export function emptyDealState(): DealState {
     notes: "",
     status: "analyzing",
     sourceType: "manual",
+    photoUrls: [],
   };
+}
+
+/**
+ * Stable identity for a property across scans/providers: normalized listing
+ * URL when present, otherwise a normalized "address city state zip" string.
+ * Powers dedupe across providers, cross-scan price tracking, and ignore-memory.
+ */
+export function propertyKey(parts: {
+  listingUrl?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}): string {
+  const url = (parts.listingUrl ?? "").trim().toLowerCase();
+  if (url) return url.replace(/[#?].*$/, "").replace(/\/+$/, "");
+  return [parts.address, parts.city, parts.state, parts.zip]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 export function exampleDealState(): DealState {
@@ -366,6 +408,26 @@ function sanitizeComp(x: unknown): Comp | null {
   };
 }
 
+function sanitizeTracking(x: unknown): PropertyTracking | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const o = x as Record<string, unknown>;
+  const now = Date.now();
+  return {
+    firstSeen: numOrNull(o.firstSeen) ?? now,
+    lastSeen: numOrNull(o.lastSeen) ?? now,
+    lastScan: numOrNull(o.lastScan) ?? now,
+    previousPrice: numOrNull(o.previousPrice),
+    currentPrice: numOrNull(o.currentPrice),
+    priceChange: numOrNull(o.priceChange),
+  };
+}
+
+function sanitizePhotoUrls(x: unknown): string[] | undefined {
+  if (!Array.isArray(x)) return undefined;
+  const urls = x.filter((u): u is string => typeof u === "string" && !!u.trim());
+  return urls.length ? urls.slice(0, 30) : [];
+}
+
 function sanitizeProperty(x: unknown): Property {
   if (!x || typeof x !== "object") return { ...EMPTY_PROPERTY };
   const o = x as Record<string, unknown>;
@@ -420,6 +482,8 @@ export function sanitizeDealState(x: unknown): DealState {
       typeof o.sourceFileName === "string" ? o.sourceFileName : undefined,
     sourceNotes: typeof o.sourceNotes === "string" ? o.sourceNotes : undefined,
     importedAt: numOrNull(o.importedAt) ?? undefined,
+    photoUrls: sanitizePhotoUrls(o.photoUrls),
+    tracking: sanitizeTracking(o.tracking),
   };
 }
 
