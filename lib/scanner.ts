@@ -163,6 +163,9 @@ export type ScanAnalysis = {
   scanned: number;
   passed: number;
   hidden: number;
+  /** How many filtered-out listings failed each gate (a listing can fail more
+   *  than one), for the Scanner debug panel. */
+  gateReasons: { gate: string; count: number }[];
 };
 
 /** Build deals, score them via the BRRRR engine, gate, and rank. */
@@ -186,10 +189,21 @@ export function analyzeProperties(
   const rows = all
     .filter((r) => r.passes)
     .sort((a, b) => compareOpportunity(a.metrics, b.metrics));
+
+  const tally = new Map<string, number>();
+  for (const r of all) {
+    if (r.passes) continue;
+    for (const g of r.failedGates) tally.set(g, (tally.get(g) ?? 0) + 1);
+  }
+  const gateReasons = Array.from(tally.entries())
+    .map(([gate, count]) => ({ gate, count }))
+    .sort((a, b) => b.count - a.count);
+
   return {
     rows,
     scanned: all.length,
     passed: rows.length,
     hidden: all.length - rows.length,
+    gateReasons,
   };
 }

@@ -21,7 +21,10 @@ import {
 import { zillowSite } from "../zillow";
 import { redfinSite } from "../redfin";
 import { realtorSite } from "../realtor";
+import { scanRedfinResults, newCounters } from "./redfinExtract";
+import { dbg } from "./debug";
 import type {
+  ProviderDebug,
   ProviderResult,
   ProviderStatus,
   ScanContext,
@@ -32,7 +35,12 @@ import type {
 
 const NAV_TIMEOUT_MS = 25_000;
 const PAGE_CONCURRENCY = 3;
-const SEARCH_SITES = [zillowSite, realtorSite, redfinSite];
+// Stabilization: focus the browser provider on Redfin only. Zillow/Realtor
+// configs remain available but are intentionally not scanned for now.
+const SEARCH_SITES = [redfinSite];
+// Silence "unused" while Zillow/Realtor are parked during stabilization.
+void zillowSite;
+void realtorSite;
 
 const PHOTO_CDN = /(photos\.zillowstatic\.com|cdn-redfin\.com|rdcpix\.com)/i;
 
@@ -154,81 +162,15 @@ async function collectViaSearchPage(
   }
 }
 
-/** Redfin: type the market into the search box (needs a region id), then collect. */
-async function collectViaRedfin(
-  context: BrowserContext,
-  cfg: StaticSiteConfig,
-  query: ScanQuery,
-): Promise<CollectResult> {
-  const page = await context.newPage();
-  const re = new RegExp(cfg.detailUrlRe.source, "i");
-  try {
-    await page.goto("https://www.redfin.com/", {
-      waitUntil: "domcontentloaded",
-      timeout: NAV_TIMEOUT_MS,
-    });
-    if (await looksBlocked(page)) {
-      return { status: "blocked", urls: [], warning: "Redfin: blocked basic extraction." };
-    }
-    const boxSelectors = [
-      '[data-rf-test-name="search-box-input"]',
-      "input#search-box-input",
-      'input[name="searchInputBox"]',
-      'input[type="search"]',
-    ];
-    let filled = false;
-    for (const sel of boxSelectors) {
-      const box = await page.$(sel);
-      if (box) {
-        await box.click().catch(() => {});
-        await box.fill(query.market).catch(() => {});
-        filled = true;
-        break;
-      }
-    }
-    if (!filled) {
-      return {
-        status: "empty",
-        urls: [],
-        warning: "Redfin: couldn't find the search box (layout may have changed).",
-      };
-    }
-    await page.waitForTimeout(1_500); // let autocomplete populate
-    await page.keyboard.press("Enter").catch(() => {});
-    await page.waitForLoadState("domcontentloaded").catch(() => {});
-    await page.waitForTimeout(2_000);
-    if (await looksBlocked(page)) {
-      return { status: "blocked", urls: [], warning: "Redfin: blocked after search." };
-    }
-    await autoScroll(page);
-
-    const hrefs = await page
-      .$$eval("a[href]", (els) => els.map((e) => (e as HTMLAnchorElement).href))
-      .catch(() => [] as string[]);
-    const content = await page.content().catch(() => "");
-    const urls = dedupe([
-      ...hrefs.filter((h) => re.test(h)),
-      ...collectDetailUrls(content, cfg, query.maxResults * 3),
-    ]);
-    if (urls.length === 0) {
-      return { status: "empty", urls: [], warning: "Redfin: no listings found." };
-    }
-    return { status: "ok", urls };
-  } catch {
-    return { status: "error", urls: [], warning: "Redfin: search failed in time." };
-  } finally {
-    await page.close().catch(() => {});
-  }
-}
-
 function collectForSite(
   context: BrowserContext,
   cfg: StaticSiteConfig,
   query: ScanQuery,
 ): Promise<CollectResult> {
-  return cfg.id === "redfin"
-    ? collectViaRedfin(context, cfg, query)
-    : collectViaSearchPage(context, cfg, query);
+  // Redfin is handled by the dedicated results-card flow (scanRedfinResults).
+  // Other portals are parked during stabilization; they would use the static
+  // search-page collector if re-enabled in SEARCH_SITES.
+  return collectViaSearchPage(context, cfg, query);
 }
 
 /* ------------------------------ detail render ----------------------------- */
@@ -282,8 +224,8 @@ async function renderDetails(
     while (i < items.length) {
       if (ctx.signal.aborted) return;
       const { url, cfg } = items[i++];
-      const r = await extractDetail(context, url, cfg, now);
-      if (r.sp) out.push(r.sp);
+      const sp = (await extractDetail(context, url, cfg, now)).sp;
+      if (sp) out.push(sp);
     }
   };
   const n = Math.min(PAGE_CONCURRENCY, items.length);
@@ -319,24 +261,39 @@ export const browserProvider: SearchProvider = {
       }
 
       const context = await newContext(browser);
+      const counters = newCounters();
+      let debug: ProviderDebug | undefined;
       let anyBlocked = false;
       let anyOk = false;
       try {
-        // Phase 1 — collect candidate detail URLs from each site's search page.
+        const collected: ScannedProperty[] = [];
         const candidates: { url: string; cfg: StaticSiteConfig }[] = [];
+
         for (const cfg of SEARCH_SITES) {
           if (ctx.signal.aborted) {
             warnings.push("Stopped early (time budget reached).");
             break;
           }
-          const r = await collectForSite(context, cfg, query);
-          if (r.warning) warnings.push(r.warning);
-          if (r.status === "blocked") anyBlocked = true;
-          if (r.status === "ok") anyOk = true;
-          for (const u of r.urls) candidates.push({ url: u, cfg });
+          if (cfg.id === "redfin") {
+            // Redfin: resolve the market -> results page, read listing cards
+            // directly (detail pages are WAF-blocked).
+            const r = await scanRedfinResults(context, query, cfg, now, counters, ctx);
+            warnings.push(...r.warnings);
+            debug = r.debug;
+            if (r.status === "blocked") anyBlocked = true;
+            if (r.status === "ok") anyOk = true;
+            collected.push(...r.properties);
+          } else {
+            // Parked portals: static search-page collect + detail render.
+            const r = await collectForSite(context, cfg, query);
+            if (r.warning) warnings.push(r.warning);
+            if (r.status === "blocked") anyBlocked = true;
+            if (r.status === "ok") anyOk = true;
+            for (const u of r.urls) candidates.push({ url: u, cfg });
+          }
         }
 
-        // Cap total detail renders to maxResults (dedupe by URL).
+        // Render any non-Redfin candidates (capped to maxResults).
         const seen = new Set<string>();
         const capped: { url: string; cfg: StaticSiteConfig }[] = [];
         for (const c of candidates) {
@@ -346,19 +303,39 @@ export const browserProvider: SearchProvider = {
             capped.push(c);
           }
         }
+        const rendered = capped.length
+          ? await renderDetails(context, capped, now, ctx)
+          : [];
 
-        // Phase 2 — render each detail page and map via the shared parser.
-        const rendered = await renderDetails(context, capped, now, ctx);
-
-        // Dedupe by propertyKey (defensive; merge across sites happens in the route too).
+        // Merge everything; dedupe by propertyKey.
         const byKey = new Map<string, ScannedProperty>();
-        for (const p of rendered) if (!byKey.has(p.propertyKey)) byKey.set(p.propertyKey, p);
+        for (const p of [...collected, ...rendered]) {
+          if (!byKey.has(p.propertyKey)) byKey.set(p.propertyKey, p);
+        }
         const properties = Array.from(byKey.values()).slice(0, query.maxResults);
+
+        // Debug summary (verification numbers).
+        warnings.push(
+          `Redfin debug — cards: ${counters.rendered}, converted: ${counters.converted}, blocked: ${counters.blocked}, errored: ${counters.errored}, unparseable: ${counters.failed.length}.`,
+        );
+        for (const fl of counters.failed.slice(0, 5)) {
+          warnings.push(
+            `Unparseable card: ${fl.title || fl.url} — missing ${fl.missing.join(", ") || "all key fields"}`,
+          );
+        }
+        dbg("SUMMARY", {
+          cards: counters.rendered,
+          converted: counters.converted,
+          blocked: counters.blocked,
+          errored: counters.errored,
+          unparseable: counters.failed.length,
+          properties: properties.length,
+        });
 
         const status: ProviderStatus =
           properties.length > 0 ? "ok" : anyBlocked ? "blocked" : anyOk ? "empty" : "empty";
 
-        return { providerId: "browser", status, properties, warnings };
+        return { providerId: "browser", status, properties, warnings, debug };
       } finally {
         await context.close().catch(() => {});
       }

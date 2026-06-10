@@ -183,6 +183,7 @@ export async function POST(req: Request) {
         status: r.status,
         count: r.properties.length,
         warnings: r.warnings,
+        debug: r.debug,
       };
     });
 

@@ -72,11 +72,19 @@ export type ProviderStatus =
   | "error" // network/parse failure
   | "unavailable"; // provider not built / not enabled yet
 
+/** Optional diagnostics a provider can surface to the UI debug panel. */
+export type ProviderDebug = {
+  searchUrl?: string;
+  cardsFound?: number;
+  cardsConverted?: number;
+};
+
 export type ProviderResult = {
   providerId: string;
   status: ProviderStatus;
   properties: ScannedProperty[];
   warnings: string[];
+  debug?: ProviderDebug;
 };
 
 /** Per-provider status surfaced to the UI after a scan run. */
@@ -86,6 +94,7 @@ export type ProviderRunStatus = {
   status: ProviderStatus;
   count: number;
   warnings: string[];
+  debug?: ProviderDebug;
 };
 
 /** The /api/property-scan response shape (search providers only). */

@@ -90,7 +90,9 @@ export function shermanSeed(): BuyBox {
     ...defaultBuyBox(),
     id: genId(),
     name: "Sherman BRRRR",
-    market: "Sherman, TX",
+    // Redfin blocks city-name lookup for automated browsers, so a ZIP is needed
+    // to reach a results page reliably (75090 = Sherman, TX).
+    market: "Sherman, TX 75090",
     maxPrice: 250000,
     minBeds: 3,
     minBaths: 2,
@@ -158,13 +160,29 @@ export function sanitizeBuyBox(x: unknown): BuyBox {
   };
 }
 
+/** Repair a previously-seeded Sherman template whose market lacks the ZIP that
+ *  Redfin needs (city-name lookup is blocked for automated browsers). */
+function migrateBuyBox(b: BuyBox): BuyBox {
+  if (b.market.trim().toLowerCase() === "sherman, tx") {
+    return { ...b, market: "Sherman, TX 75090" };
+  }
+  return b;
+}
+
 export function loadBuyBoxes(): BuyBox[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.map(sanitizeBuyBox);
+      if (Array.isArray(parsed)) {
+        const boxes = parsed.map(sanitizeBuyBox);
+        const migrated = boxes.map(migrateBuyBox);
+        if (migrated.some((b, i) => b.market !== boxes[i].market)) {
+          saveBuyBoxes(migrated);
+        }
+        return migrated;
+      }
     }
   } catch {
     /* ignore corrupt storage */

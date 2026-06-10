@@ -26,7 +26,12 @@ import type {
 } from "@/lib/providers/types";
 
 type Mode = "market" | "file";
-type ScanSummary = { scanned: number; passed: number; hidden: number };
+type ScanSummary = {
+  scanned: number;
+  passed: number;
+  hidden: number;
+  gateReasons: { gate: string; count: number }[];
+};
 
 const STEPS = [
   "Searching listings",
@@ -171,6 +176,7 @@ export function PropertyScanner({
         scanned: analysis.scanned,
         passed: analysis.passed,
         hidden: analysis.hidden,
+        gateReasons: analysis.gateReasons,
       });
     } catch {
       setError("We couldn't reach the scanner. Check your connection and try again.");
@@ -202,6 +208,7 @@ export function PropertyScanner({
         scanned: analysis.scanned,
         passed: analysis.passed,
         hidden: analysis.hidden,
+        gateReasons: analysis.gateReasons,
       });
     } catch {
       setError("We couldn't read that file.");
@@ -506,6 +513,67 @@ export function PropertyScanner({
                 >
                   View Deal Queue ({queueCount})
                 </button>
+              </div>
+            )}
+
+            {/* Debug panel — provider, search URL, cards, filter reasons */}
+            {(statuses || summary) && (
+              <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 font-mono text-[11px] leading-relaxed text-slate-100">
+                <div className="mb-2 flex items-center gap-2 font-sans text-xs font-bold uppercase tracking-wide text-slate-300">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  Scan diagnostics
+                </div>
+                {statuses?.map((s) => (
+                  <div key={s.providerId} className="mb-2">
+                    <div>
+                      <span className="text-slate-400">Provider used:</span> {s.label} —{" "}
+                      {statusText(s.status)} · {s.count} found
+                    </div>
+                    {s.debug?.searchUrl && (
+                      <div className="truncate">
+                        <span className="text-slate-400">Search URL:</span>{" "}
+                        <a
+                          href={s.debug.searchUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sky-300 underline"
+                        >
+                          {s.debug.searchUrl}
+                        </a>
+                      </div>
+                    )}
+                    {s.debug?.cardsFound != null && (
+                      <div>
+                        <span className="text-slate-400">Cards found:</span> {s.debug.cardsFound}
+                      </div>
+                    )}
+                    {s.debug?.cardsConverted != null && (
+                      <div>
+                        <span className="text-slate-400">Cards converted:</span>{" "}
+                        {s.debug.cardsConverted}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {summary && (
+                  <div className="mt-2 border-t border-slate-700 pt-2">
+                    <div>
+                      <span className="text-slate-400">Scanned:</span> {summary.scanned} ·{" "}
+                      <span className="text-slate-400">Matched:</span> {summary.passed} ·{" "}
+                      <span className="text-slate-400">Filtered out:</span> {summary.hidden}
+                    </div>
+                    {summary.gateReasons.length > 0 ? (
+                      <div>
+                        <span className="text-slate-400">Filtered because:</span>{" "}
+                        {summary.gateReasons.map((r) => `${r.gate} (${r.count})`).join(" · ")}
+                      </div>
+                    ) : summary.hidden > 0 ? (
+                      <div className="text-slate-400">
+                        Filtered with no single gate (incomplete listing data).
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
             )}
           </div>
