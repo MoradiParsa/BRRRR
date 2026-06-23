@@ -9,6 +9,16 @@
       "env": {
         "PATH": "C:\\Program Files\\nodejs;${env:PATH}"
       }
+    },
+    {
+      "name": "local",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["local-html/serve.mjs"],
+      "port": 3100,
+      "env": {
+        "PATH": "C:\\Program Files\\nodejs;${env:PATH}",
+        "PORT": "3100"
+      }
     }
   ]
 }
