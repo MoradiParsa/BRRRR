@@ -29,7 +29,13 @@ let out = html
     () => "<script>\n" + js + "\n</scr" + "ipt>",
   );
 
+// The shippable single file, plus a root index.html so GitHub Pages serves the
+// app at the repo's clean URL (https://<user>.github.io/<repo>/). Both are the
+// identical self-contained output.
 const dest = join(here, "..", "BRRRR_AI_Local.html");
+const indexDest = join(here, "..", "index.html");
 writeFileSync(dest, out, "utf8");
+writeFileSync(indexDest, out, "utf8");
 
 console.log(`Built ${dest} (${(out.length / 1024).toFixed(1)} KB)`);
+console.log(`Built ${indexDest} (Pages entry)`);
