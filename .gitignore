@@ -31,3 +31,10 @@ next-env.d.ts
 
 # local Claude settings
 .claude/settings.local.json
+
+# private data — never commit uploaded CSVs, exports, or local property data
+*.csv
+*.tsv
+/data/
+/private/
+brrrr-backup-*.json

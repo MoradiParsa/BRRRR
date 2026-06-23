@@ -260,9 +260,9 @@
   function gradeRank(g) { const i = INVESTMENT_GRADES.indexOf(g); return i === -1 ? INVESTMENT_GRADES.length : i; }
 
   /* ------------------------------- format ------------------------------- */
-  const fmtUSD = (n, digits) => (isFinite(n) ? n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: digits || 0, minimumFractionDigits: digits || 0 }) : "—");
-  const fmtPct = (n, digits) => (isFinite(n) ? `${n.toFixed(digits == null ? 1 : digits)}%` : "∞");
-  const fmtNum = (n, digits) => (isFinite(n) ? n.toFixed(digits == null ? 2 : digits) : "∞");
+  const fmtUSD = (n, digits) => (n != null && isFinite(n) ? n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: digits || 0, minimumFractionDigits: digits || 0 }) : "—");
+  const fmtPct = (n, digits) => (n == null ? "—" : isFinite(n) ? `${n.toFixed(digits == null ? 1 : digits)}%` : "∞");
+  const fmtNum = (n, digits) => (n == null ? "—" : isFinite(n) ? n.toFixed(digits == null ? 2 : digits) : "∞");
   const fmtInt = (n) => (n == null || !isFinite(n) ? "—" : Math.round(n).toLocaleString("en-US"));
 
   /* ===================================================================== *
@@ -275,7 +275,67 @@
     downPaymentPct: 20, purchaseRate: 9.5, purchaseTermYears: 30, closingPct: 3, holdingPct: 2,
     refinanceLTV: 75, refiRate: 7.25, refiTermYears: 30, taxRatePct: 1.5, insuranceAnnual: 1200,
     managementPct: 8, vacancyPct: 5, maintenancePct: 5, capexPct: 5, arvMultiplier: 1.3,
+    defaultRehab: 0, defaultRent: 0,
   };
+
+  // Multifamily typically carries higher management + reserves and a tighter ARV bump.
+  const MULTIFAMILY_OVERRIDES = { managementPct: 10, vacancyPct: 7, maintenancePct: 7, capexPct: 7, arvMultiplier: 1.25 };
+
+  const PROPERTY_TYPES = ["single_family", "multifamily"];
+  function profileKey(type) { return type === "multifamily" ? "multifamily" : "singleFamily"; }
+  function propertyTypeLabel(type) { return type === "multifamily" ? "Multifamily" : "Single Family"; }
+
+  function defaultProfiles() {
+    return {
+      singleFamily: Object.assign({}, DEFAULT_ASSUMPTIONS),
+      multifamily: Object.assign({}, DEFAULT_ASSUMPTIONS, MULTIFAMILY_OVERRIDES),
+    };
+  }
+
+  // The assumption profile (SF or MF) that should seed a given property.
+  function assumptionsForType(type) {
+    const a = STATE && STATE.assumptions ? STATE.assumptions : defaultProfiles();
+    return a[profileKey(type)] || a.singleFamily || DEFAULT_ASSUMPTIONS;
+  }
+
+  // Local, rule-based property-type inference from a units count and/or a type label.
+  function inferPropertyType(unitsRaw, typeText, fallback) {
+    const u = num(unitsRaw);
+    if (u != null && u > 1) return "multifamily";
+    const t = normKey(typeText);
+    if (t && /(duplex|triplex|fourplex|plex|multi|apartment|\bmf\b|units?)/.test(t)) return "multifamily";
+    if (t && /(single|\bsfr\b|\bsfh\b|house|detached|town|condo|\bsf\b)/.test(t)) return "single_family";
+    if (u === 1) return "single_family";
+    return fallback || "single_family";
+  }
+
+  /* ----------------------------- markets -------------------------------- *
+   * Texas-focused grouping for filtering. A market label from the CSV is    *
+   * always respected (custom labels allowed); otherwise we infer one from   *
+   * the city name. Anything unrecognized falls into "Other".                */
+  const MARKETS = ["DFW", "Houston", "College Station", "Austin", "San Antonio", "Other"];
+  const MARKET_CITY_RULES = [
+    ["DFW", ["dallas", "fort worth", "ft worth", "arlington", "plano", "irving", "frisco", "mckinney", "denton", "garland", "mesquite", "richardson", "carrollton", "lewisville", "allen", "grand prairie", "euless", "bedford", "hurst", "grapevine", "mansfield", "rockwall", "wylie", "the colony", "flower mound", "keller", "southlake", "rowlett", "desoto", "duncanville", "cedar hill", "burleson", "weatherford", "prosper", "celina", "little elm", "anna", "melissa", "greenville", "terrell", "sherman", "denison", "cleburne", "waxahachie", "midlothian", "forney", "sachse", "murphy", "coppell"]],
+    ["Houston", ["houston", "katy", "sugar land", "pearland", "spring", "cypress", "the woodlands", "woodlands", "humble", "kingwood", "tomball", "conroe", "baytown", "pasadena", "league city", "friendswood", "missouri city", "rosenberg", "richmond", "stafford", "channelview", "deer park", "la porte", "galveston", "texas city", "dickinson", "alvin", "porter", "magnolia", "atascocita", "fulshear", "manvel", "webster", "seabrook", "bellaire"]],
+    ["College Station", ["college station", "bryan", "navasota", "hearne", "caldwell", "madisonville", "huntsville", "brenham", "franklin", "anderson"]],
+    ["Austin", ["austin", "round rock", "cedar park", "georgetown", "pflugerville", "leander", "kyle", "buda", "san marcos", "hutto", "lakeway", "bee cave", "dripping springs", "manor", "elgin", "taylor", "bastrop", "lockhart", "del valle", "jollyville"]],
+    ["San Antonio", ["san antonio", "new braunfels", "schertz", "cibolo", "converse", "universal city", "live oak", "selma", "boerne", "seguin", "helotes", "leon valley", "kirby", "windcrest", "alamo heights", "floresville", "canyon lake", "fair oaks ranch"]],
+  ];
+
+  function normCity(s) { return normKey(s).replace(/[.,]/g, ""); }
+  function inferMarket(city) {
+    const c = normCity(city);
+    if (!c) return "";
+    for (const [market, cities] of MARKET_CITY_RULES) if (cities.indexOf(c) !== -1) return market;
+    for (const [market, cities] of MARKET_CITY_RULES) if (cities.some((x) => c.indexOf(x) !== -1)) return market;
+    return "";
+  }
+  // The market a property belongs to for grouping/filtering (explicit > inferred > Other).
+  function marketOf(p) {
+    const explicit = (p.market || "").trim();
+    if (explicit) return explicit;
+    return inferMarket(p.city) || "Other";
+  }
 
   const PIPELINE_STAGES = [
     { value: "watching", label: "Watching" },
@@ -325,6 +385,8 @@
     return {
       id: genId(), createdAt: now, updatedAt: now,
       name: "", address: "", city: "", state: "", zip: "",
+      market: "", submarket: "",
+      propertyType: "single_family", units: null,
       beds: null, baths: null, sqft: null, lotSize: null, yearBuilt: null,
       lat: null, lng: null,
       listingLink: "", photosLink: "",
@@ -333,7 +395,7 @@
       queueStatus: "new", inPipeline: false, pipelineStage: "watching",
       arvMode: "manual",
       brrrr: defaultBrrrr(0),
-      comps: [],
+      excludedCompIds: [], compSelections: { lower: null, similar: null, higher: null }, extraFields: {},
     };
   }
 
@@ -341,9 +403,11 @@
   // Build the engine Inputs from a property, substituting the chosen ARV source.
   function resolveInputs(p) {
     const b = p.brrrr;
-    const range = computeArvRange(p);
     const manualArv = num(b.arv) || 0;
-    const arv = arvForSource(p.arvMode, manualArv, range);
+    // Only price the comp range when a comp-based ARV actually feeds the deal — keeps
+    // the list/dashboard fast (they use the manual ARV and skip the O(n) comp scan).
+    let arv = manualArv;
+    if (p.arvMode && p.arvMode !== "manual") arv = arvForSource(p.arvMode, manualArv, computeArvRange(p));
     const n = (v) => num(v) || 0;
     return {
       purchasePrice: n(b.purchasePrice), purchaseType: b.purchaseType === "cash" ? "cash" : "financed",
@@ -387,12 +451,22 @@
   };
 
   function detectRenovation(p) {
-    const text = [p.notes, p.description, p.renovationNotes].filter(Boolean).join(" \n ").toLowerCase();
+    return detectRenovationText([p.notes, p.description, p.renovationNotes].filter(Boolean).join(" \n "));
+  }
+
+  // Precompiled word-boundary matchers so e.g. "dated" doesn't match inside "updated".
+  const RENO_RX = {};
+  for (const cat of Object.keys(RENO_RULES)) {
+    RENO_RX[cat] = RENO_RULES[cat].map((kw) => [kw, new RegExp("\\b" + kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i")]);
+  }
+
+  function detectRenovationText(raw) {
+    const text = String(raw || "").toLowerCase();
     if (!text.trim()) return { condition: "Unknown", confidence: "Low", matched: [] };
     const hits = { recent: [], updated: [], light: [], needs: [] };
-    for (const cat of Object.keys(RENO_RULES)) {
-      for (const kw of RENO_RULES[cat]) {
-        if (text.indexOf(kw) !== -1 && hits[cat].indexOf(kw) === -1) hits[cat].push(kw);
+    for (const cat of Object.keys(RENO_RX)) {
+      for (const [kw, rx] of RENO_RX[cat]) {
+        if (rx.test(text) && hits[cat].indexOf(kw) === -1) hits[cat].push(kw);
       }
     }
     const nRecent = hits.recent.length, nUpdated = hits.updated.length, nLight = hits.light.length, nNeeds = hits.needs.length;
@@ -413,13 +487,13 @@
     return { condition, confidence, matched };
   }
 
-  // Map a property's detected condition to the comp engine's reno quality.
-  function renoQuality(p) {
-    const c = detectRenovation(p).condition;
+  // Map a detected condition to the comp engine's reno quality.
+  function renoQualityFromCondition(c) {
     if (c === "Recently Renovated") return "Superior";
     if (c === "Needs Renovation") return "Basic";
     return "Similar";
   }
+  function renoQuality(p) { return renoQualityFromCondition(detectRenovation(p).condition); }
 
   /* ===================================================================== *
    *  4. COMP SUGGESTIONS + ARV RANGE  (local data only)                    *
@@ -441,87 +515,126 @@
     return Math.max(0, Math.round((Date.now() - t) / 86400000));
   }
 
-  // Score every other property as a candidate comp for `subject`.
-  function scoreCandidate(subject, p) {
-    const value = listValue(p);
-    const sqft = num(p.sqft);
-    const ppsf = value && sqft ? value / sqft : null;
-    if (ppsf == null) return null; // unusable without price + sqft
-    const dist = haversineMiles(subject, p);
+  // A comp's value for ARV purposes: prefer a real sold price, then list/purchase, then ARV.
+  function compValue(c) {
+    const sold = num(c.soldPrice);
+    if (sold) return { value: sold, sold: true };
+    const list = c.brrrr ? num(c.brrrr.purchasePrice) : null;
+    if (list) return { value: list, sold: false };
+    const arv = c.brrrr ? num(c.brrrr.arv) : null;
+    if (arv) return { value: arv, sold: false };
+    return null;
+  }
+
+  // Score another property from the master list as a comp for `subject`.
+  function scoreCompProp(subject, c) {
+    const cv = compValue(c);
+    const sqft = num(c.sqft);
+    if (!cv || !sqft) return null; // unusable without a value + sqft
+    const value = cv.value;
+    const ppsf = value / sqft;
+    const dist = haversineMiles(subject, c);
     const why = [];
     let score = 100;
 
-    if (subject.zip && p.zip && normKey(subject.zip) === normKey(p.zip)) why.push("Same ZIP");
-    else if (subject.city && p.city && normKey(subject.city) === normKey(p.city)) { score -= 4; why.push("Same city"); }
-    else score -= 18;
+    const sm = marketOf(subject), cm = marketOf(c);
+    if (sm === cm && sm !== "Other") why.push(sm);
+    else if (sm !== cm) score -= 12;
 
-    if (dist != null) { score -= Math.min(25, dist * 8); why.push(dist.toFixed(1) + " mi"); }
+    if (subject.zip && c.zip && normKey(subject.zip) === normKey(c.zip)) why.push("Same ZIP");
+    else if (subject.city && c.city && normKey(subject.city) === normKey(c.city)) { score -= 3; why.push("Same city"); }
+    else score -= 14;
 
-    if (num(subject.beds) != null && num(p.beds) != null) {
-      score -= Math.min(15, Math.abs(p.beds - subject.beds) * 8);
-      if (p.beds === subject.beds) why.push("Same beds");
+    const cType = c.propertyType || inferPropertyType(c.units, "", null);
+    if (cType && subject.propertyType) {
+      if (cType === subject.propertyType) why.push(propertyTypeLabel(cType));
+      else score -= 14;
     }
-    if (num(subject.baths) != null && num(p.baths) != null) score -= Math.min(12, Math.abs(p.baths - subject.baths) * 8);
-    if (num(subject.sqft) > 0 && sqft) {
+    if (num(subject.units) != null && num(c.units) != null) {
+      score -= Math.min(12, Math.abs(c.units - subject.units) * 6);
+      if (c.units === subject.units) why.push(c.units + "-unit");
+    }
+
+    if (dist != null) { score -= Math.min(22, dist * 7); if (dist <= 2) why.push(dist.toFixed(1) + " mi"); }
+
+    if (num(subject.beds) != null && num(c.beds) != null) {
+      score -= Math.min(15, Math.abs(c.beds - subject.beds) * 8);
+      if (c.beds === subject.beds) why.push("Same beds");
+    }
+    if (num(subject.baths) != null && num(c.baths) != null) score -= Math.min(12, Math.abs(c.baths - subject.baths) * 8);
+    if (num(subject.sqft) > 0) {
       const diff = Math.abs(sqft - subject.sqft) / subject.sqft;
       score -= Math.min(25, diff * 60);
       if (diff <= 0.1) why.push("Similar sqft");
     }
-    const sq = renoQuality(subject), pq = renoQuality(p);
-    if (sq === pq) why.push("Similar condition"); else score -= 4;
 
-    if (num(p.soldPrice) > 0) { score += 6; why.push("Sold price"); }
-    const days = soldDaysAgo(p);
+    const cond = detectRenovation(c).condition;
+    const reno = renoQualityFromCondition(cond);
+    if (renoQuality(subject) === reno) why.push("Similar condition"); else score -= 4;
+    if (cond !== "Unknown") why.push(cond);
+
+    const days = soldDaysAgo(c);
+    if (cv.sold) { score += 6; why.push("Sold comp"); }
     if (days != null) { score -= Math.min(12, (days / 30) * 2); if (days <= 120) why.push("Recent sale"); }
 
-    const reno = renoQuality(p);
     const impliedARV = num(subject.sqft) > 0 ? ppsf * renoFactor(reno) * subject.sqft : value;
-    return { p, value, sqft, ppsf, dist, days, reno, score: Math.max(5, Math.round(score)), why, impliedARV };
+    return { c, value, sold: cv.sold, sqft, ppsf, dist, days, reno, condition: cond, score: Math.max(5, Math.round(score)), why, impliedARV };
   }
 
-  // Return up to three comps: a lower / similar / higher value bracket.
-  function suggestComps(subject, all) {
-    const pool = all
-      .filter((p) => p.id !== subject.id)
-      .map((p) => scoreCandidate(subject, p))
+  // Every other property scored + ranked as a candidate comp for `subject`.
+  function compCandidates(subject) {
+    const excluded = new Set(subject.excludedCompIds || []);
+    return STATE.properties
+      .filter((c) => c.id !== subject.id && !excluded.has(c.id))
+      .map((c) => scoreCompProp(subject, c))
       .filter(Boolean)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 10);
-    if (pool.length === 0) return { lower: null, similar: null, higher: null, pool: [] };
+      .sort((a, b) => b.score - a.score);
+  }
 
+  // Auto-pick lower / similar / higher brackets from a scored candidate pool.
+  function autoBrackets(pool) {
+    if (pool.length === 0) return { lower: null, similar: null, higher: null };
     const similar = pool[0];
     const rest = pool.slice(1);
-    const below = rest.filter((c) => c.impliedARV < similar.impliedARV).sort((a, b) => b.score - a.score);
-    const above = rest.filter((c) => c.impliedARV > similar.impliedARV).sort((a, b) => b.score - a.score);
-
-    let lower = below[0] || null;
-    let higher = above[0] || null;
-    // If the best match sits at an extreme, backfill from whichever side has data.
+    const below = rest.filter((x) => x.impliedARV < similar.impliedARV).sort((a, b) => b.score - a.score);
+    const above = rest.filter((x) => x.impliedARV > similar.impliedARV).sort((a, b) => b.score - a.score);
+    let lower = below[0] || null, higher = above[0] || null;
     if (!lower && above[1]) lower = above[1];
     if (!higher && below[1]) higher = below[1];
-    if (lower) lower.bracket = "lower";
-    if (higher) higher.bracket = "higher";
-    similar.bracket = "similar";
+    return { lower, similar, higher };
+  }
+
+  // Resolve the three comps for a subject, honoring manual picks (compSelections).
+  function selectComps(subject) {
+    const pool = compCandidates(subject);
+    const auto = autoBrackets(pool);
+    const sel = subject.compSelections || {};
+    const used = new Set();
+    const resolve = (bracket) => {
+      let chosen = null;
+      if (sel[bracket]) {
+        chosen = pool.find((x) => x.c.id === sel[bracket]) || null;
+        if (chosen) chosen.pinned = true;
+      }
+      if (!chosen) chosen = auto[bracket];
+      if (chosen && used.has(chosen.c.id)) chosen = sel[bracket] ? chosen : null; // keep manual dupes, drop auto dupes
+      if (chosen) { chosen.bracket = bracket; used.add(chosen.c.id); }
+      return chosen || null;
+    };
+    const similar = resolve("similar");
+    const lower = resolve("lower");
+    const higher = resolve("higher");
     return { lower, similar, higher, pool };
   }
 
-  // ARV range derived from the subject's *kept* comps (or auto-suggested).
+  // ARV range derived from the three selected comps.
   function computeArvRange(p) {
     const sqft = num(p.sqft);
-    const kept = (p.comps || []).filter((c) => c.included !== false);
-    let comps = kept;
-    if (comps.length === 0) {
-      const all = STATE ? STATE.properties : [];
-      const sug = suggestComps(p, all);
-      comps = [sug.lower, sug.similar, sug.higher].filter(Boolean).map((c) => compFromCandidate(c));
-    }
-    if (!sqft || comps.length === 0) return { conservative: 0, expected: 0, aggressive: 0, confidence: "Low", ppsfLow: 0, ppsfHigh: 0, count: 0 };
+    const sel = selectComps(p);
+    const three = [sel.lower, sel.similar, sel.higher].filter(Boolean);
+    if (!sqft || three.length === 0) return { conservative: 0, expected: 0, aggressive: 0, confidence: "Low", ppsfLow: 0, ppsfHigh: 0, count: 0 };
 
-    const implied = comps
-      .filter((c) => num(c.salePrice) > 0 && num(c.sqft) > 0)
-      .map((c) => (c.salePrice / c.sqft) * renoFactor(c.reno || "Similar"));
-    if (implied.length === 0) return { conservative: 0, expected: 0, aggressive: 0, confidence: "Low", ppsfLow: 0, ppsfHigh: 0, count: 0 };
-
+    const implied = three.map((x) => x.ppsf * renoFactor(x.reno));
     const arvs = implied.map((ppsf) => ppsf * sqft);
     const conservative = Math.min.apply(null, arvs);
     const aggressive = Math.max.apply(null, arvs);
@@ -534,16 +647,6 @@
     return {
       conservative, expected, aggressive, confidence,
       ppsfLow: Math.min.apply(null, implied), ppsfHigh: Math.max.apply(null, implied), count: implied.length,
-    };
-  }
-
-  // Convert a scored candidate into a stored comp record on a subject property.
-  function compFromCandidate(c) {
-    return {
-      id: genId(), refId: c.p.id, address: propTitle(c.p) + (cityStateZip(c.p) ? ", " + cityStateZip(c.p) : ""),
-      salePrice: c.value, sqft: c.sqft, beds: num(c.p.beds), baths: num(c.p.baths),
-      distance: c.dist, daysSinceSale: c.days, reno: c.reno, included: true,
-      link: c.p.listingLink || "", soldDate: c.p.soldDate || "", why: c.why.join(" · "),
     };
   }
 
@@ -586,7 +689,12 @@
     ["city", ["city", "town"]],
     ["state", ["state", "province", "st"]],
     ["zip", ["zip code", "zipcode", "zip", "postal code", "postal"]],
-    ["price", ["list price", "listing price", "asking price", "purchase price", "price", "asking", "list"]],
+    ["market", ["market", "metro", "msa", "metro area", "market area", "region"]],
+    ["submarket", ["submarket", "sub market", "neighborhood", "subdivision", "district", "area"]],
+    ["listPrice", ["list price", "listing price", "asking price", "asking", "list"]],
+    ["price", ["purchase price", "current price", "price"]],
+    ["propertyType", ["property type", "home type", "type", "style", "dwelling type", "structure type"]],
+    ["units", ["number of units", "num units", "unit count", "units", "no of units"]],
     ["beds", ["bedrooms", "beds", "bedroom", "bed", "br"]],
     ["baths", ["bathrooms", "baths", "bathroom", "bath", "ba"]],
     ["sqft", ["square feet", "square footage", "sq ft", "sqft", "living area", "gla", "size"]],
@@ -624,7 +732,21 @@
     return map;
   }
 
-  function csvToProperties(text, assumptions) {
+  // Columns that were mapped to a known field; everything else (non-empty) is kept as raw data.
+  function extraFieldsFor(headers, cells, map) {
+    const usedIdx = new Set(Object.values(map));
+    const extra = {};
+    for (let i = 0; i < headers.length; i++) {
+      if (usedIdx.has(i)) continue;
+      const key = (headers[i] || "").trim();
+      const val = i < cells.length ? String(cells[i]).trim() : "";
+      if (key && val) extra[key] = val;
+    }
+    return extra;
+  }
+
+  function csvToProperties(text, profiles, defaultType) {
+    profiles = profiles || defaultProfiles();
     const rows = parseCsv(text);
     if (rows.length < 2) return { properties: [], matched: {}, headers: [] };
     const headers = rows[0].map((h) => h.trim());
@@ -635,7 +757,7 @@
       const get = (field) => { const i = map[field]; return i != null && i < cells.length ? cells[i].trim() : ""; };
       const address = get("address");
       const name = get("propertyName") || get("property") || address;
-      const price = num(get("price"));
+      const price = num(get("price")) != null ? num(get("price")) : num(get("listPrice"));
       if (!address && !name && price == null && num(get("beds")) == null) continue;
 
       const p = emptyProperty();
@@ -644,6 +766,10 @@
       p.city = get("city");
       p.state = get("state");
       p.zip = get("zip");
+      p.market = get("market");
+      p.submarket = get("submarket");
+      p.units = num(get("units"));
+      p.propertyType = inferPropertyType(get("units"), get("propertyType"), defaultType || "single_family");
       p.beds = num(get("beds"));
       p.baths = num(get("baths"));
       p.sqft = num(get("sqft"));
@@ -659,8 +785,10 @@
       p.listingStatus = get("status");
       p.soldPrice = num(get("soldPrice"));
       p.soldDate = get("soldDate");
+      p.extraFields = extraFieldsFor(headers, cells, map);
 
-      const b = defaultBrrrr(price || 0, assumptions);
+      const profile = profiles[profileKey(p.propertyType)] || profiles.singleFamily || DEFAULT_ASSUMPTIONS;
+      const b = defaultBrrrr(price || 0, profile);
       const taxes = num(get("taxes"));
       const insurance = num(get("insurance"));
       const rent = num(get("rent"));
@@ -668,8 +796,8 @@
       const arv = num(get("arv"));
       if (taxes != null) b.taxes = taxes;
       if (insurance != null) b.insurance = insurance;
-      if (rent != null) b.monthlyRent = rent;
-      if (rehab != null) b.rehabCosts = rehab;
+      b.monthlyRent = rent != null ? rent : (profile.defaultRent || null);
+      b.rehabCosts = rehab != null ? rehab : (profile.defaultRehab || null);
       if (arv != null) b.arv = arv;
       p.brrrr = b;
       out.push(p);
@@ -686,7 +814,7 @@
   let STATE = null;
 
   function defaultState() {
-    return { version: 1, properties: [], assumptions: Object.assign({}, DEFAULT_ASSUMPTIONS), compareIds: [] };
+    return { version: 3, properties: [], assumptions: defaultProfiles(), defaultPropertyType: "single_family", compareIds: [] };
   }
 
   function loadState() {
@@ -703,11 +831,27 @@
   function sanitizeState(x) {
     const s = defaultState();
     if (x && typeof x === "object") {
-      if (x.assumptions && typeof x.assumptions === "object") s.assumptions = Object.assign({}, DEFAULT_ASSUMPTIONS, x.assumptions);
+      s.assumptions = sanitizeAssumptions(x.assumptions);
       if (Array.isArray(x.properties)) s.properties = x.properties.map(sanitizeProperty);
+      // Legacy backups carried a separate comps DB; fold any usable records into the master
+      // list so nothing is lost, then comps are matched from siblings going forward.
+      if (Array.isArray(x.comps)) s.properties = s.properties.concat(x.comps.map(dbCompToProperty).filter(Boolean));
       if (Array.isArray(x.compareIds)) s.compareIds = x.compareIds.filter((id) => typeof id === "string");
+      if (PROPERTY_TYPES.indexOf(x.defaultPropertyType) !== -1) s.defaultPropertyType = x.defaultPropertyType;
     }
     return s;
+  }
+
+  function sanitizeProfile(x) { return Object.assign({}, DEFAULT_ASSUMPTIONS, x && typeof x === "object" ? x : {}); }
+
+  // Accepts the new {singleFamily, multifamily} shape or migrates a legacy flat object.
+  function sanitizeAssumptions(x) {
+    if (!x || typeof x !== "object") return defaultProfiles();
+    if (x.singleFamily || x.multifamily) {
+      return { singleFamily: sanitizeProfile(x.singleFamily), multifamily: sanitizeProfile(x.multifamily || x.singleFamily) };
+    }
+    const flat = sanitizeProfile(x); // legacy flat assumptions → seed both profiles
+    return { singleFamily: Object.assign({}, flat), multifamily: Object.assign({}, flat) };
   }
 
   function sanitizeProperty(x) {
@@ -718,6 +862,9 @@
     p.createdAt = num(x.createdAt) || p.createdAt;
     p.updatedAt = num(x.updatedAt) || p.updatedAt;
     p.name = str(x.name); p.address = str(x.address); p.city = str(x.city); p.state = str(x.state); p.zip = str(x.zip);
+    p.market = str(x.market); p.submarket = str(x.submarket);
+    p.propertyType = PROPERTY_TYPES.indexOf(x.propertyType) !== -1 ? x.propertyType : "single_family";
+    p.units = num(x.units);
     p.beds = num(x.beds); p.baths = num(x.baths); p.sqft = num(x.sqft); p.lotSize = num(x.lotSize); p.yearBuilt = num(x.yearBuilt);
     p.lat = num(x.lat); p.lng = num(x.lng);
     p.listingLink = str(x.listingLink); p.photosLink = str(x.photosLink);
@@ -729,21 +876,34 @@
     p.arvMode = ["manual", "conservative", "expected", "aggressive"].indexOf(x.arvMode) !== -1 ? x.arvMode : "manual";
     p.brrrr = Object.assign(defaultBrrrr(0), x.brrrr && typeof x.brrrr === "object" ? x.brrrr : {});
     if (p.brrrr.purchaseType !== "cash") p.brrrr.purchaseType = "financed";
-    p.comps = Array.isArray(x.comps) ? x.comps.map(sanitizeComp).filter(Boolean) : [];
+    p.excludedCompIds = Array.isArray(x.excludedCompIds) ? x.excludedCompIds.filter((id) => typeof id === "string") : [];
+    p.compSelections = sanitizeSelections(x.compSelections);
+    p.extraFields = x.extraFields && typeof x.extraFields === "object" ? x.extraFields : {};
     return p;
   }
 
-  function sanitizeComp(x) {
+  function sanitizeSelections(x) {
+    const s = { lower: null, similar: null, higher: null };
+    if (x && typeof x === "object") for (const k of ["lower", "similar", "higher"]) if (typeof x[k] === "string") s[k] = x[k];
+    return s;
+  }
+
+  // Migrate a legacy comps-DB record from an old backup into a master-list property.
+  function dbCompToProperty(x) {
     if (!x || typeof x !== "object") return null;
-    return {
-      id: typeof x.id === "string" ? x.id : genId(), refId: typeof x.refId === "string" ? x.refId : null,
-      address: typeof x.address === "string" ? x.address : "",
-      salePrice: num(x.salePrice), sqft: num(x.sqft), beds: num(x.beds), baths: num(x.baths),
-      distance: num(x.distance), daysSinceSale: num(x.daysSinceSale),
-      reno: ["Basic", "Similar", "Superior"].indexOf(x.reno) !== -1 ? x.reno : "Similar",
-      included: x.included !== false, link: typeof x.link === "string" ? x.link : "",
-      soldDate: typeof x.soldDate === "string" ? x.soldDate : "", why: typeof x.why === "string" ? x.why : "",
-    };
+    const str = (v) => (typeof v === "string" ? v : "");
+    const p = emptyProperty();
+    p.address = str(x.address); p.name = str(x.address);
+    p.city = str(x.city); p.state = str(x.state); p.zip = str(x.zip);
+    p.beds = num(x.beds); p.baths = num(x.baths); p.sqft = num(x.sqft); p.units = num(x.units);
+    p.propertyType = PROPERTY_TYPES.indexOf(x.propertyType) !== -1 ? x.propertyType : inferPropertyType(x.units, "", "single_family");
+    p.lat = num(x.lat); p.lng = num(x.lng);
+    p.soldPrice = num(x.salePrice); p.soldDate = str(x.soldDate);
+    p.listingStatus = p.soldPrice ? "Sold" : "";
+    p.listingLink = str(x.link);
+    p.notes = str(x.notes); p.description = str(x.description);
+    if (!p.address && p.soldPrice == null && p.sqft == null) return null;
+    return p;
   }
 
   function saveState() {
@@ -784,7 +944,7 @@
   }
 
   const NUMERIC_FIELDS = new Set([
-    "beds", "baths", "sqft", "lotSize", "yearBuilt", "lat", "lng", "soldPrice",
+    "units", "beds", "baths", "sqft", "lotSize", "yearBuilt", "lat", "lng", "soldPrice",
     "brrrr.purchasePrice", "brrrr.downPayment", "brrrr.purchaseInterestRate", "brrrr.purchaseLoanTerm",
     "brrrr.closingCosts", "brrrr.holdingCosts", "brrrr.rehabCosts", "brrrr.arv", "brrrr.refinanceLTV",
     "brrrr.newInterestRate", "brrrr.newLoanTerm", "brrrr.monthlyRent", "brrrr.taxes", "brrrr.insurance",
@@ -822,12 +982,17 @@
   const ROUTES = {
     dashboard: { label: "Dashboard", ico: "▦", render: renderDashboard },
     properties: { label: "Properties", ico: "▤", render: renderProperties },
-    map: { label: "Map", ico: "◉", render: renderMap },
-    queue: { label: "Deal Queue", ico: "≣", render: renderQueue },
-    pipeline: { label: "Pipeline", ico: "⇶", render: renderPipeline },
+    analyze: { label: "Analyze", ico: "⤓", render: renderAnalyze },
     compare: { label: "Compare", ico: "⇄", render: renderCompare },
     settings: { label: "Settings", ico: "⚙", render: renderSettings },
+    // Kept reachable by direct hash link, hidden from the simplified sidebar:
+    map: { label: "Map", ico: "◉", render: renderMap, hidden: true },
+    queue: { label: "Deal Queue", ico: "≣", render: renderQueue, hidden: true },
+    pipeline: { label: "Pipeline", ico: "⇶", render: renderPipeline, hidden: true },
   };
+
+  // Only these appear in the sidebar, in this order.
+  const NAV_ORDER = ["dashboard", "properties", "analyze", "compare", "settings"];
 
   function parseHash() {
     const h = (location.hash || "#/dashboard").replace(/^#\/?/, "");
@@ -850,12 +1015,10 @@
   }
 
   function renderShell(route) {
-    const queueCount = STATE.properties.filter((p) => p.queueStatus !== "ignore" && !p.inPipeline).length;
-    const navItems = Object.keys(ROUTES).map((key) => {
+    const navItems = NAV_ORDER.map((key) => {
       const r = ROUTES[key];
       const active = key === route || (route === "property" && key === "properties") ? " active" : "";
-      const badge = key === "queue" && queueCount ? `<span class="badge">${queueCount}</span>` : "";
-      return `<button class="nav-item${active}" data-nav="${key}"><span class="nav-ico">${r.ico}</span><span class="nav-label">${r.label}</span>${badge}</button>`;
+      return `<button class="nav-item${active}" data-nav="${key}"><span class="nav-ico">${r.ico}</span><span class="nav-label">${r.label}</span></button>`;
     }).join("");
     return `
       <div class="app">
@@ -892,7 +1055,8 @@
 
   function renderDashboard(view) {
     const props = STATE.properties;
-    const withDeal = props.map((p) => ({ p, m: metricsFor(p) })).filter((x) => x.m.hasDeal);
+    const all = props.map((p) => ({ p, m: metricsFor(p) }));
+    const withDeal = all.filter((x) => x.m.hasDeal);
     const buy = withDeal.filter((x) => x.m.recommendation === "Buy").length;
     const caution = withDeal.filter((x) => x.m.recommendation === "Buy with Caution").length;
     const pass = withDeal.filter((x) => x.m.recommendation === "Pass").length;
@@ -902,105 +1066,333 @@
 
     const top = withDeal.slice().sort((a, b) => b.m.score - a.m.score).slice(0, 6);
 
+    // Per-market rollup, ordered by count.
+    const ms = {};
+    for (const x of all) {
+      const k = marketOf(x.p);
+      const s = ms[k] || (ms[k] = { count: 0, buy: 0, caution: 0, pass: 0, cf: 0 });
+      s.count++;
+      if (x.m.hasDeal) {
+        s.cf += isFinite(x.m.monthlyCashFlow) ? x.m.monthlyCashFlow : 0;
+        if (x.m.recommendation === "Buy") s.buy++;
+        else if (x.m.recommendation === "Buy with Caution") s.caution++;
+        else s.pass++;
+      }
+    }
+    const marketRows = Object.keys(ms).sort((a, b) => ms[b].count - ms[a].count);
+
     view.innerHTML = `
       <div class="page-head">
-        <div><h1>Dashboard</h1><p>${props.length} properties · ${withDeal.length} analyzed</p></div>
+        <div><h1>Dashboard</h1><p>${props.length} propert${props.length === 1 ? "y" : "ies"} · ${withDeal.length} analyzed</p></div>
         <div class="page-actions">
-          <button class="btn" data-go="properties">Import CSV</button>
+          <button class="btn" data-go="analyze">⤓ Import CSV</button>
           <button class="btn primary" data-add="1">+ Add property</button>
         </div>
       </div>
-      ${props.length === 0 ? emptyDashboard() : `
-      <div class="grid cols-4">
-        ${stat("Properties", props.length, "")}
-        ${stat("Avg deal score", avgScore || "—", buy + " buy · " + caution + " caution · " + pass + " pass")}
-        ${stat("Total monthly cash flow", fmtUSD(totalCf), "", cfClass(totalCf))}
-        ${stat("Forced equity (sum)", fmtUSD(totalEquity), "", totalEquity >= 0 ? "good" : "bad")}
+      ${props.length === 0
+        ? emptyState("🏠", "No properties yet", "Import one master CSV and every deal is scored instantly — comps are picked from the same list. Everything stays on this device.", `<button class="btn primary" data-go="analyze">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
+        : `
+      <div class="grid cols-4 kpi-grid">
+        ${stat("Properties", props.length, withDeal.length + " analyzed")}
+        ${stat("Deal mix", (buy || "—"), buy + " buy · " + caution + " caution · " + pass + " pass", buy ? "good" : "")}
+        ${stat("Monthly cash flow", fmtUSD(totalCf), "across analyzed deals", cfClass(totalCf))}
+        ${stat("Forced equity", fmtUSD(totalEquity), "sum of created equity", totalEquity >= 0 ? "good" : "bad")}
       </div>
-      <div class="card mt-lg">
-        <h3>Top opportunities</h3>
-        ${top.length === 0 ? `<p class="faint">Add purchase price, rent and ARV to a property to see it ranked here.</p>` : `
-        <table>
-          <thead><tr><th>Property</th><th>Grade</th><th class="num">Cash flow/mo</th><th class="num">DSCR</th><th class="num">ARV</th><th class="num">Score</th></tr></thead>
-          <tbody>
-            ${top.map(({ p, m }) => `
-              <tr class="prop-row" data-open="${p.id}">
-                <td><div class="prop-name">${esc(propTitle(p))}</div><div class="prop-sub">${esc(cityStateZip(p) || "—")}</div></td>
-                <td><span class="badge grade ${gradeClass(m.grade)}">${m.grade}</span></td>
-                <td class="num ${cfClass(m.monthlyCashFlow)}">${fmtUSD(m.monthlyCashFlow)}</td>
-                <td class="num">${fmtNum(m.dscr)}</td>
-                <td class="num">${fmtUSD(m.arv)}</td>
-                <td class="num">${m.score}</td>
-              </tr>`).join("")}
-          </tbody>
-        </table>`}
+
+      <div class="grid cols-2 mt-lg dash-split">
+        <div class="card">
+          <h3>Top opportunities <span class="muted">— ranked by deal score</span></h3>
+          ${top.length === 0 ? `<p class="faint">Add purchase price, rent and ARV to a property to see it ranked here.</p>` : `
+          <table>
+            <thead><tr><th>Property</th><th>Grade</th><th class="num">Cash flow/mo</th><th class="num">Score</th></tr></thead>
+            <tbody>
+              ${top.map(({ p, m }) => `
+                <tr class="prop-row" data-open="${p.id}">
+                  <td><div class="prop-name">${esc(propTitle(p))}</div><div class="prop-sub">${esc(marketOf(p))} · ${esc(cityStateZip(p) || "—")}</div></td>
+                  <td><span class="badge grade ${gradeClass(m.grade)}">${m.grade}</span></td>
+                  <td class="num ${cfClass(m.monthlyCashFlow)}">${fmtUSD(m.monthlyCashFlow)}</td>
+                  <td class="num">${m.score}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>`}
+        </div>
+
+        <div class="card">
+          <h3>By market <span class="muted">— click to filter</span></h3>
+          <div class="market-list">
+            ${marketRows.map((k) => {
+              const s = ms[k];
+              const seg = (n, cls) => n ? `<span class="seg ${cls}" style="flex:${n}"></span>` : "";
+              return `<button class="market-row" data-marketgo="${attr(k)}">
+                <div class="market-row-top"><span class="market-name">${esc(k)}</span><span class="market-count">${s.count}</span></div>
+                <div class="market-bar">${seg(s.buy, "good")}${seg(s.caution, "warn")}${seg(s.pass, "bad")}${s.buy + s.caution + s.pass === 0 ? `<span class="seg muted-seg" style="flex:1"></span>` : ""}</div>
+                <div class="market-row-sub">${s.buy} buy · ${s.caution} caution · ${s.pass} pass${s.cf ? " · " + fmtUSD(s.cf) + "/mo" : ""}</div>
+              </button>`;
+            }).join("")}
+          </div>
+        </div>
       </div>`}
     `;
     bindCommon(view);
-  }
-
-  function emptyDashboard() {
-    return `<div class="empty">
-      <div style="font-size:32px;margin-bottom:8px">🏚️ → 💰</div>
-      <h3 style="margin:0 0 6px">No properties yet</h3>
-      <p>Add one manually or import a CSV to get started. Everything stays on this device.</p>
-      <div class="flex" style="justify-content:center;margin-top:14px">
-        <button class="btn primary" data-add="1">+ Add property</button>
-        <button class="btn" data-go="properties">Import CSV</button>
-      </div>
-    </div>`;
+    view.querySelectorAll("[data-marketgo]").forEach((b) => b.addEventListener("click", () => {
+      propMarketFilter = b.dataset.marketgo; navigate("properties");
+    }));
   }
 
   function stat(k, v, sub, cls) {
     return `<div class="stat"><div class="k">${k}</div><div class="v ${cls || ""}">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
   }
 
+  // Polished empty state used across views. `actions` is raw button HTML.
+  function emptyState(icon, title, body, actions) {
+    return `<div class="empty">
+      <div class="empty-ico">${icon}</div>
+      <h3>${esc(title)}</h3>
+      <p>${esc(body)}</p>
+      ${actions ? `<div class="flex" style="justify-content:center;margin-top:16px">${actions}</div>` : ""}
+    </div>`;
+  }
+
   /* ===================================================================== *
-   *  10. VIEW: PROPERTIES (list + CSV import)                              *
+   *  10. VIEW: ANALYZE  (one master CSV → score everything)                *
    * ===================================================================== */
 
-  function renderProperties(view) {
-    const props = STATE.properties;
+  const MASTER_COLS_HINT = "Recognized: address, city, state, zip, market, submarket, price, list price, sold price, beds, baths, sqft, units, property type, rent, taxes, insurance, rehab, ARV, latitude, longitude, listing link, photo link, status, sold date, notes, description.";
+
+  // The 12 assumptions surfaced on the pre-import step (full set lives in Settings).
+  const IMPORT_ASSUME_FIELDS = [
+    ["defaultRehab", "Default rehab ($)", 1], ["defaultRent", "Default rent ($/mo)", 1],
+    ["arvMultiplier", "ARV multiplier", 0.01], ["refiRate", "Interest rate %", 0.01],
+    ["refiTermYears", "Loan term (yrs)", 1], ["refinanceLTV", "Refinance LTV %", 0.1],
+    ["managementPct", "Management %", 0.1], ["vacancyPct", "Vacancy %", 0.1],
+    ["maintenancePct", "Maintenance %", 0.1], ["capexPct", "CapEx %", 0.1],
+    ["closingPct", "Closing %", 0.1], ["holdingPct", "Holding %", 0.1],
+  ];
+
+  let pendingSubjects = null, pendingSubjectMatch = null, pendingSubjectText = null;
+
+  function renderAnalyze(view) {
+    const nProps = STATE.properties.length;
     view.innerHTML = `
       <div class="page-head">
-        <div><h1>Properties</h1><p>${props.length} saved · stored locally</p></div>
-        <div class="page-actions">
-          <button class="btn primary" data-add="1">+ Add property</button>
-        </div>
+        <div><h1>Analyze</h1><p>Import one master CSV — every property is scored, and comps are drawn from the same list.</p></div>
+        <div class="page-actions"><button class="btn" data-add="1">+ Add manually</button></div>
       </div>
+
       <div class="card" id="csv-card">
-        <h3>Import CSV <span class="muted">— optional columns, fuzzy header matching</span></h3>
+        <h3>1 · Drop your property CSV</h3>
         <div class="dropzone" id="dropzone">
-          <p style="margin:0 0 8px">Drop a CSV file here, or</p>
+          <div class="dz-ico">⤓</div>
+          <p style="margin:0 0 8px">Drop a CSV file here, or choose one</p>
           <input type="file" id="csv-file" accept=".csv,text/csv" style="width:auto;display:inline-block" />
-          <div class="hint mt">Recognized columns: name, address, city, state, zip, price, beds, baths, sqft, lot size, year built, taxes, insurance, rent, rehab, ARV, latitude, longitude, listing link, photos, notes, description, status, sold price, sold date, renovation notes.</div>
+          <div class="hint mt">${MASTER_COLS_HINT}</div>
+          <div class="hint">Headers are matched fuzzily; unrecognized columns are kept as extra data, not discarded.</div>
         </div>
         <div id="csv-preview"></div>
       </div>
+
       <div class="card">
-        <h3>All properties</h3>
-        ${props.length === 0 ? `<p class="faint">Nothing yet. Add a property or import a CSV above.</p>` : `
-        <table>
-          <thead><tr><th>Property</th><th>Reno</th><th>Grade</th><th class="num">Price</th><th class="num">Cash flow</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            ${props.map((p) => {
-              const m = metricsFor(p); const reno = detectRenovation(p);
-              return `<tr class="prop-row" data-open="${p.id}">
-                <td><div class="prop-name">${esc(propTitle(p))}</div><div class="prop-sub">${esc(cityStateZip(p) || "—")}</div></td>
-                <td><span class="badge ${renoBadgeClass(reno.condition)}">${reno.condition}</span></td>
-                <td>${m.hasDeal ? `<span class="badge grade ${gradeClass(m.grade)}">${m.grade}</span>` : `<span class="faint">—</span>`}</td>
-                <td class="num">${fmtUSD(num(p.brrrr.purchasePrice))}</td>
-                <td class="num ${m.hasDeal ? cfClass(m.monthlyCashFlow) : ""}">${m.hasDeal ? fmtUSD(m.monthlyCashFlow) : "—"}</td>
-                <td><span class="pill">${p.inPipeline ? pipelineLabel(p.pipelineStage) : queueLabel(p.queueStatus)}</span></td>
-                <td class="right"><button class="btn sm danger" data-del="${p.id}">Delete</button></td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-        </table>`}
+        <h3>How comps work now <span class="muted">— no separate comps file</span></h3>
+        <p class="hint" style="margin:0">Import one broad list. When you open a property, the app ranks the <em>other</em> properties as comps — same market, type, size and condition — and suggests a lower / similar / higher comp plus an ARV range. Add a <strong>sold price</strong> and <strong>sold date</strong> to any rows you want treated as solid sold comps.</p>
       </div>
     `;
     bindCommon(view);
     bindCsv(view);
+    if (pendingSubjects) renderSubjectPreview(view, { properties: pendingSubjects, matched: pendingSubjectMatch });
+  }
+
+  function bindCsv(view) {
+    const fileInput = view.querySelector("#csv-file");
+    const dz = view.querySelector("#dropzone");
+    const handle = (text, fname) => {
+      pendingSubjectText = text;
+      const res = csvToProperties(text, STATE.assumptions, STATE.defaultPropertyType);
+      pendingSubjects = res.properties; pendingSubjectMatch = res.matched;
+      renderSubjectPreview(view, res, fname);
+    };
+    if (fileInput) fileInput.addEventListener("change", () => {
+      const f = fileInput.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => handle(String(reader.result), f.name);
+      reader.readAsText(f);
+    });
+    if (dz) {
+      ["dragover", "dragenter"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
+      ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, () => dz.classList.remove("drag")));
+      dz.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const f = e.dataTransfer.files[0]; if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => handle(String(reader.result), f.name);
+        reader.readAsText(f);
+      });
+    }
+  }
+
+  function assumeProfileCard(key, title) {
+    const a = STATE.assumptions[key];
+    const rows = IMPORT_ASSUME_FIELDS.map(([k, label, step]) =>
+      `<div class="field"><label>${label}</label><input type="number" step="${step}" data-profile="${key}" data-key="${k}" value="${a[k]}" /></div>`
+    ).join("");
+    return `<div class="card" style="margin:0"><div class="comp-tag">${title}</div><div class="grid cols-2 mt">${rows}</div></div>`;
+  }
+
+  function reparseSubjects(view) {
+    if (pendingSubjectText == null) return;
+    const res = csvToProperties(pendingSubjectText, STATE.assumptions, STATE.defaultPropertyType);
+    pendingSubjects = res.properties; pendingSubjectMatch = res.matched;
+    renderSubjectPreview(view, res);
+  }
+
+  function renderSubjectPreview(view, res, fname) {
+    const wrap = view.querySelector("#csv-preview");
+    if (!wrap) return;
+    if (!res.properties || res.properties.length === 0) {
+      wrap.innerHTML = `<p class="bad mt">No rows recognized${fname ? " in " + esc(fname) : ""}. Check that the first row is a header.</p>`;
+      return;
+    }
+    const matchedList = Object.keys(res.matched || {}).map((f) => `<span class="pill">${f} ← ${esc(res.matched[f])}</span>`).join(" ");
+    const sample = res.properties.slice(0, 6);
+    const mf = res.properties.filter((p) => p.propertyType === "multifamily").length;
+    const sf = res.properties.length - mf;
+    const byMarket = {};
+    for (const p of res.properties) { const m = marketOf(p); byMarket[m] = (byMarket[m] || 0) + 1; }
+    const marketChips = Object.keys(byMarket).sort((a, b) => byMarket[b] - byMarket[a])
+      .map((m) => `<span class="pill">${esc(m)} · ${byMarket[m]}</span>`).join(" ");
+
+    wrap.innerHTML = `
+      <div class="divider"></div>
+      <strong>${res.properties.length} properties parsed</strong> <span class="hint">· ${sf} single-family · ${mf} multifamily</span>
+      <div class="hint mt">Markets: ${marketChips}</div>
+      <div class="hint mt">Matched columns: ${matchedList || "none"}</div>
+      <table class="mt">
+        <thead><tr><th>Name</th><th>Location</th><th>Market</th><th>Type</th><th class="num">Price</th><th class="num">Bd/Ba</th><th class="num">Sqft</th><th>Geo</th></tr></thead>
+        <tbody>
+          ${sample.map((p) => `<tr>
+            <td>${esc(propTitle(p))}</td><td>${esc(cityStateZip(p) || "—")}</td>
+            <td><span class="pill">${esc(marketOf(p))}</span></td>
+            <td><span class="pill">${propertyTypeLabel(p.propertyType)}</span></td>
+            <td class="num">${fmtUSD(num(p.brrrr.purchasePrice))}</td>
+            <td class="num">${p.beds == null ? "—" : p.beds}/${p.baths == null ? "—" : p.baths}</td>
+            <td class="num">${fmtInt(p.sqft)}</td>
+            <td>${p.lat != null && p.lng != null ? "✓" : "—"}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      ${res.properties.length > 6 ? `<p class="hint">…and ${res.properties.length - 6} more.</p>` : ""}
+
+      <div class="divider"></div>
+      <h3>3 · Confirm assumptions before scoring</h3>
+      <div class="field" style="max-width:340px">
+        <label>Default type when a row doesn't specify one</label>
+        <div class="mode-toggle" id="default-type">
+          <button data-dtype="single_family" class="${STATE.defaultPropertyType !== "multifamily" ? "active" : ""}">Single Family</button>
+          <button data-dtype="multifamily" class="${STATE.defaultPropertyType === "multifamily" ? "active" : ""}">Multifamily</button>
+        </div>
+      </div>
+      <div class="grid cols-2 mt">
+        ${assumeProfileCard("singleFamily", "Single-family defaults")}
+        ${assumeProfileCard("multifamily", "Multifamily defaults")}
+      </div>
+
+      <div class="flex between wrap mt-lg">
+        <span class="hint">Edits here update your saved defaults and re-seed the rows above.</span>
+        <div class="flex">
+          <button class="btn" id="csv-cancel">Cancel</button>
+          <button class="btn primary" id="csv-confirm">Import & analyze ${res.properties.length}</button>
+        </div>
+      </div>
+    `;
+
+    wrap.querySelectorAll("#default-type [data-dtype]").forEach((b) => b.addEventListener("click", () => {
+      STATE.defaultPropertyType = b.dataset.dtype === "multifamily" ? "multifamily" : "single_family";
+      saveState(); reparseSubjects(view);
+    }));
+    wrap.querySelectorAll("[data-profile][data-key]").forEach((input) => input.addEventListener("input", () => {
+      const v = num(input.value);
+      if (v != null) { STATE.assumptions[input.dataset.profile][input.dataset.key] = v; saveState(); }
+    }));
+    wrap.querySelector("#csv-cancel").addEventListener("click", () => {
+      pendingSubjects = null; pendingSubjectText = null; wrap.innerHTML = "";
+      const f = view.querySelector("#csv-file"); if (f) f.value = "";
+    });
+    wrap.querySelector("#csv-confirm").addEventListener("click", () => {
+      // Re-seed from raw text so the latest assumption edits are applied.
+      const incoming = csvToProperties(pendingSubjectText, STATE.assumptions, STATE.defaultPropertyType).properties;
+      const existing = STATE.properties;
+      let added = 0, updated = 0;
+      for (const np of incoming) {
+        const key = importKey(np);
+        const match = key ? existing.find((e) => importKey(e) === key) : null;
+        if (match) { mergeProperty(match, np); updated++; }
+        else { existing.unshift(np); added++; }
+      }
+      pendingSubjects = null; pendingSubjectText = null;
+      saveState();
+      toast(`Imported ${added} new, updated ${updated}.`);
+      navigate("properties");
+    });
+  }
+
+  /* ===================================================================== *
+   *  10b. VIEW: PROPERTIES (list)                                          *
+   * ===================================================================== */
+
+  let propMarketFilter = "All";
+
+  function renderProperties(view) {
+    const props = STATE.properties;
+    // Tally markets present, ordered by the canonical list then any custom labels.
+    const counts = {};
+    for (const p of props) { const m = marketOf(p); counts[m] = (counts[m] || 0) + 1; }
+    const present = Object.keys(counts);
+    const ordered = MARKETS.filter((m) => counts[m]).concat(present.filter((m) => MARKETS.indexOf(m) === -1).sort());
+    if (propMarketFilter !== "All" && !counts[propMarketFilter]) propMarketFilter = "All";
+
+    const chip = (label, count) => `<button class="chip${propMarketFilter === label ? " active" : ""}" data-market="${attr(label)}">${esc(label)}${count != null ? `<span class="chip-n">${count}</span>` : ""}</button>`;
+    const filterBar = props.length
+      ? `<div class="filter-bar">${chip("All", props.length)}${ordered.map((m) => chip(m, counts[m])).join("")}</div>`
+      : "";
+
+    const shown = propMarketFilter === "All" ? props : props.filter((p) => marketOf(p) === propMarketFilter);
+
+    view.innerHTML = `
+      <div class="page-head">
+        <div><h1>Properties</h1><p>${props.length} saved · stored locally${propMarketFilter !== "All" ? ` · showing ${shown.length} in ${esc(propMarketFilter)}` : ""}</p></div>
+        <div class="page-actions">
+          <button class="btn" data-go="analyze">⤓ Import CSV</button>
+          <button class="btn primary" data-add="1">+ Add property</button>
+        </div>
+      </div>
+      ${filterBar}
+      <div class="card">
+        ${props.length === 0
+          ? emptyState("📋", "No properties yet", "Import one master CSV of properties and the app scores every deal — then picks comps from the same list.", `<button class="btn primary" data-go="analyze">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
+          : (shown.length === 0 ? `<p class="faint">No properties in ${esc(propMarketFilter)}.</p>` : `
+        <table>
+          <thead><tr><th>Property</th><th>Market</th><th>Type</th><th>Reno</th><th>Grade</th><th class="num">Price</th><th class="num">Cash flow</th><th></th></tr></thead>
+          <tbody>
+            ${shown.map((p) => {
+              const m = metricsFor(p); const reno = detectRenovation(p);
+              return `<tr class="prop-row" data-open="${p.id}">
+                <td><div class="prop-name">${esc(propTitle(p))}</div><div class="prop-sub">${esc(cityStateZip(p) || "—")}</div></td>
+                <td><span class="pill">${esc(marketOf(p))}</span></td>
+                <td><span class="pill">${propertyTypeLabel(p.propertyType)}${p.units > 1 ? " · " + p.units + "u" : ""}</span></td>
+                <td><span class="badge ${renoBadgeClass(reno.condition)}">${reno.condition}</span></td>
+                <td>${m.hasDeal ? `<span class="badge grade ${gradeClass(m.grade)}">${m.grade}</span>` : `<span class="faint">—</span>`}</td>
+                <td class="num">${fmtUSD(num(p.brrrr.purchasePrice))}</td>
+                <td class="num ${m.hasDeal ? cfClass(m.monthlyCashFlow) : ""}">${m.hasDeal ? fmtUSD(m.monthlyCashFlow) : "—"}</td>
+                <td class="right"><button class="btn sm danger" data-del="${p.id}">Delete</button></td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>`)}
+      </div>
+    `;
+    bindCommon(view);
+    view.querySelectorAll("[data-market]").forEach((b) => b.addEventListener("click", () => {
+      propMarketFilter = b.dataset.market; renderProperties(view);
+    }));
     view.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", (e) => {
       e.stopPropagation();
       const id = b.dataset.del;
@@ -1012,82 +1404,6 @@
     }));
   }
 
-  let pendingImport = null;
-
-  function bindCsv(view) {
-    const fileInput = view.querySelector("#csv-file");
-    const dz = view.querySelector("#dropzone");
-    const handleText = (text, fname) => {
-      const res = csvToProperties(text, STATE.assumptions);
-      pendingImport = res.properties;
-      renderCsvPreview(view, res, fname);
-    };
-    if (fileInput) fileInput.addEventListener("change", () => {
-      const f = fileInput.files[0]; if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => handleText(String(reader.result), f.name);
-      reader.readAsText(f);
-    });
-    if (dz) {
-      ["dragover", "dragenter"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
-      ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, () => dz.classList.remove("drag")));
-      dz.addEventListener("drop", (e) => {
-        e.preventDefault();
-        const f = e.dataTransfer.files[0]; if (!f) return;
-        const reader = new FileReader();
-        reader.onload = () => handleText(String(reader.result), f.name);
-        reader.readAsText(f);
-      });
-    }
-  }
-
-  function renderCsvPreview(view, res, fname) {
-    const wrap = view.querySelector("#csv-preview");
-    if (res.properties.length === 0) { wrap.innerHTML = `<p class="bad mt">No rows recognized in ${esc(fname || "file")}. Check that the first row is a header.</p>`; return; }
-    const matchedList = Object.keys(res.matched).map((f) => `<span class="pill">${f} ← ${esc(res.matched[f])}</span>`).join(" ");
-    const sample = res.properties.slice(0, 5);
-    wrap.innerHTML = `
-      <div class="divider"></div>
-      <div class="flex between wrap">
-        <strong>${res.properties.length} properties parsed</strong>
-        <div class="flex">
-          <button class="btn" id="csv-cancel">Cancel</button>
-          <button class="btn primary" id="csv-confirm">Import ${res.properties.length}</button>
-        </div>
-      </div>
-      <div class="hint mt">Matched columns: ${matchedList || "none"}</div>
-      <table class="mt">
-        <thead><tr><th>Name</th><th>Location</th><th class="num">Price</th><th class="num">Beds/Baths</th><th class="num">Sqft</th><th>Lat/Lng</th></tr></thead>
-        <tbody>
-          ${sample.map((p) => `<tr>
-            <td>${esc(propTitle(p))}</td><td>${esc(cityStateZip(p) || "—")}</td>
-            <td class="num">${fmtUSD(num(p.brrrr.purchasePrice))}</td>
-            <td class="num">${p.beds == null ? "—" : p.beds}/${p.baths == null ? "—" : p.baths}</td>
-            <td class="num">${fmtInt(p.sqft)}</td>
-            <td>${p.lat != null && p.lng != null ? "✓" : "—"}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table>
-      ${res.properties.length > 5 ? `<p class="hint">…and ${res.properties.length - 5} more.</p>` : ""}
-    `;
-    wrap.querySelector("#csv-cancel").addEventListener("click", () => { pendingImport = null; wrap.innerHTML = ""; view.querySelector("#csv-file").value = ""; });
-    wrap.querySelector("#csv-confirm").addEventListener("click", () => {
-      if (!pendingImport) return;
-      const incoming = pendingImport;
-      const existing = STATE.properties;
-      let added = 0, updated = 0;
-      for (const np of incoming) {
-        const key = importKey(np);
-        const match = existing.find((e) => importKey(e) === key);
-        if (match) { mergeProperty(match, np); updated++; }
-        else { existing.unshift(np); added++; }
-      }
-      pendingImport = null; saveState();
-      toast(`Imported ${added} new, updated ${updated}.`);
-      render();
-    });
-  }
-
   function importKey(p) {
     const link = (p.listingLink || "").trim().toLowerCase().replace(/[#?].*$/, "").replace(/\/+$/, "");
     if (link) return link;
@@ -1096,10 +1412,11 @@
 
   // Fill only fields the incoming row provides; keep manual edits otherwise.
   function mergeProperty(dst, src) {
-    const fields = ["name", "address", "city", "state", "zip", "listingLink", "photosLink", "notes", "description", "renovationNotes", "listingStatus", "soldDate"];
+    const fields = ["name", "address", "city", "state", "zip", "market", "submarket", "propertyType", "listingLink", "photosLink", "notes", "description", "renovationNotes", "listingStatus", "soldDate"];
     for (const f of fields) if (src[f]) dst[f] = src[f];
-    ["beds", "baths", "sqft", "lotSize", "yearBuilt", "lat", "lng", "soldPrice"].forEach((f) => { if (src[f] != null) dst[f] = src[f]; });
+    ["units", "beds", "baths", "sqft", "lotSize", "yearBuilt", "lat", "lng", "soldPrice"].forEach((f) => { if (src[f] != null) dst[f] = src[f]; });
     ["purchasePrice", "taxes", "insurance", "monthlyRent", "rehabCosts", "arv"].forEach((f) => { if (src.brrrr[f] != null) dst.brrrr[f] = src.brrrr[f]; });
+    if (src.extraFields) dst.extraFields = Object.assign({}, dst.extraFields, src.extraFields);
     touch(dst);
   }
 
@@ -1135,14 +1452,8 @@
     if (!el) return;
     const inCompare = STATE.compareIds.indexOf(p.id) !== -1;
     el.innerHTML = `
-      ${p.inPipeline
-        ? `<span class="badge good">In pipeline · ${pipelineLabel(p.pipelineStage)}</span>`
-        : `<button class="btn" data-pipeline="1">→ Add to pipeline</button>`}
       <button class="btn ${inCompare ? "primary" : ""}" data-compare="1">${inCompare ? "✓ Comparing" : "+ Compare"}</button>
     `;
-    el.querySelector("[data-pipeline]") && el.querySelector("[data-pipeline]").addEventListener("click", () => {
-      p.inPipeline = true; p.pipelineStage = "analyzing"; touch(p); saveState(); renderHeadActions(p); toast("Added to pipeline.");
-    });
     el.querySelector("[data-compare]").addEventListener("click", () => {
       const i = STATE.compareIds.indexOf(p.id);
       if (i === -1) STATE.compareIds.push(p.id); else STATE.compareIds.splice(i, 1);
@@ -1174,6 +1485,20 @@
           ${field("City", "city", p.city)}
           ${field("State", "state", p.state)}
           ${field("ZIP", "zip", p.zip)}
+        </div>
+        <div class="field-row">
+          ${field("Market", "market", p.market, { ph: inferMarket(p.city) || "Other" })}
+          ${field("Submarket", "submarket", p.submarket, { ph: "Neighborhood / area" })}
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Property type</label>
+            <div class="mode-toggle" data-toggle="propertyType">
+              <button data-val="single_family" class="${p.propertyType !== "multifamily" ? "active" : ""}">Single Family</button>
+              <button data-val="multifamily" class="${p.propertyType === "multifamily" ? "active" : ""}">Multifamily</button>
+            </div>
+          </div>
+          ${field("Units", "units", p.units)}
         </div>
         <div class="field-row three">
           ${field("Beds", "beds", p.beds)}
@@ -1282,7 +1607,7 @@
         ${opt("expected", "Expected", range.expected)}
         ${opt("aggressive", "Aggressive", range.aggressive)}
       </div>
-      ${range.count > 0 ? `<div class="hint mt">Comp range from ${range.count} comp${range.count === 1 ? "" : "s"} · confidence ${range.confidence} · $${fmtInt(range.ppsfLow)}–$${fmtInt(range.ppsfHigh)}/sqft</div>` : `<div class="hint mt">Add comps below (or sold properties to your database) to unlock comp-based ARV.</div>`}
+      ${range.count > 0 ? `<div class="hint mt">Comp range from ${range.count} comp${range.count === 1 ? "" : "s"} · confidence ${range.confidence} · $${fmtInt(range.ppsfLow)}–$${fmtInt(range.ppsfHigh)}/sqft</div>` : `<div class="hint mt">Import more properties (ideally with a sold price + sqft) to unlock comp-based ARV — comps are drawn from your other properties.</div>`}
     `;
   }
 
@@ -1351,58 +1676,67 @@
   }
 
   function compsCard(p) {
-    const sug = suggestComps(p, STATE.properties);
-    const kept = p.comps || [];
+    const sel = selectComps(p);
     const sqft = num(p.sqft);
     const range = computeArvRange(p);
+    const pool = sel.pool;
+    const excluded = p.excludedCompIds || [];
+    const otherCount = STATE.properties.length - 1;
 
-    const suggestionCard = (c) => {
-      if (!c) return "";
-      const alreadyKept = kept.some((k) => k.refId === c.p.id);
-      return `<div class="comp-card ${c.bracket}">
-        <div class="flex between"><span class="comp-tag">${c.bracket} comp</span><span class="pill">match ${c.score}</span></div>
-        <div class="prop-name mt">${esc(propTitle(c.p))}</div>
-        <div class="prop-sub">${esc(cityStateZip(c.p) || "—")}</div>
+    // <option> list of every candidate property, for the Replace dropdown.
+    const optionsFor = (currentId) => pool.map((o) =>
+      `<option value="${o.c.id}" ${o.c.id === currentId ? "selected" : ""}>${esc(propTitle(o.c))} · ${fmtUSD(o.value)} · match ${o.score}</option>`
+    ).join("");
+
+    const card = (x, bracket) => {
+      if (!x) {
+        if (pool.length === 0) return `<div class="comp-card ${bracket} comp-empty"><span class="comp-tag">${bracket} comp</span><p class="faint mt" style="margin-bottom:0">No candidate.</p></div>`;
+        return `<div class="comp-card ${bracket} comp-empty">
+          <span class="comp-tag">${bracket} comp</span>
+          <p class="faint mt">No auto match for this bracket.</p>
+          <label class="comp-swap"><span>Pick a comp</span>
+            <select data-replacecomp="${bracket}"><option value="">Choose…</option>${optionsFor(null)}</select>
+          </label>
+        </div>`;
+      }
+      const c = x.c;
+      return `<div class="comp-card ${bracket}">
+        <div class="flex between"><span class="comp-tag">${bracket} comp</span><span class="pill">${x.pinned ? "📌 kept" : "match " + x.score}</span></div>
+        <div class="prop-name mt">${esc(propTitle(c))}</div>
+        <div class="prop-sub">${esc(cityStateZip(c) || marketOf(c))}</div>
         <div class="grid cols-2 mt">
-          ${miniStat("Sold/list", fmtUSD(c.value))}
-          ${miniStat("$/sqft", "$" + fmtInt(c.ppsf))}
+          ${miniStat(x.sold ? "Sold price" : "Value", fmtUSD(x.value))}
+          ${miniStat("$/sqft", "$" + fmtInt(x.ppsf))}
         </div>
-        <div class="hint mt">${fmtInt(c.sqft)} sqft · ${c.p.beds == null ? "—" : c.p.beds}bd/${c.p.baths == null ? "—" : c.p.baths}ba · ${c.reno}${c.dist != null ? " · " + c.dist.toFixed(1) + " mi" : ""}${c.p.soldDate ? " · sold " + esc(c.p.soldDate) : ""}</div>
-        ${sqft ? `<div class="hint">Implies ARV ≈ ${fmtUSD(c.impliedARV)}</div>` : ""}
-        <div class="comp-why">Why: ${esc(c.why.join(" · ") || "best available match")}</div>
-        <div class="flex mt">
-          <button class="btn sm ${alreadyKept ? "" : "primary"}" data-keepcomp="${c.p.id}" ${alreadyKept ? "disabled" : ""}>${alreadyKept ? "Kept" : "Keep comp"}</button>
-          ${c.p.listingLink ? `<a class="btn sm" href="${attr(c.p.listingLink)}" target="_blank" rel="noopener">Listing ↗</a>` : ""}
-          <a class="btn sm" href="#/property/${c.p.id}">Open ↗</a>
+        <div class="hint mt">${fmtInt(x.sqft)} sqft · ${c.beds == null ? "—" : c.beds}bd/${c.baths == null ? "—" : c.baths}ba · ${x.condition}${x.dist != null ? " · " + x.dist.toFixed(1) + " mi" : ""}${c.soldDate ? " · sold " + esc(c.soldDate) : ""}</div>
+        ${sqft ? `<div class="hint">Implies ARV ≈ ${fmtUSD(x.impliedARV)}</div>` : ""}
+        <div class="comp-why">Why: ${esc(x.why.join(" · ") || "best available match")}</div>
+        <label class="comp-swap mt"><span>Replace</span>
+          <select data-replacecomp="${bracket}">${optionsFor(c.id)}</select>
+        </label>
+        <div class="comp-actions mt">
+          <button class="btn sm ${x.pinned ? "primary" : ""}" data-pincomp="${bracket}" data-id="${c.id}">${x.pinned ? "✓ Kept" : "Keep"}</button>
+          <button class="btn sm danger" data-excludecomp="${c.id}">Remove</button>
+          ${c.listingLink ? `<a class="btn sm" href="${attr(c.listingLink)}" target="_blank" rel="noopener">Listing ↗</a>` : ""}
+          ${c.photosLink ? `<a class="btn sm" href="${attr(c.photosLink)}" target="_blank" rel="noopener">Photos ↗</a>` : ""}
+          <button class="btn sm ghost" data-opencomp="${c.id}">Open</button>
         </div>
       </div>`;
     };
 
-    const keptRow = (c) => `<div class="comp-card">
-      <div class="flex between">
-        <div><div class="prop-name">${esc(c.address || "Comp")}</div>
-        <div class="hint">${fmtUSD(c.salePrice)} · ${fmtInt(c.sqft)} sqft · $${fmtInt(num(c.salePrice) && num(c.sqft) ? c.salePrice / c.sqft : null)}/sqft · ${c.reno}${c.distance != null ? " · " + c.distance.toFixed(1) + " mi" : ""}${c.soldDate ? " · " + esc(c.soldDate) : ""}</div>
-        ${c.why ? `<div class="comp-why">Why: ${esc(c.why)}</div>` : ""}</div>
-        <div class="flex">
-          ${c.link ? `<a class="btn sm" href="${attr(c.link)}" target="_blank" rel="noopener">↗</a>` : ""}
-          <button class="btn sm" data-togglecomp="${c.id}">${c.included !== false ? "Exclude" : "Include"}</button>
-          <button class="btn sm danger" data-removecomp="${c.id}">Remove</button>
-        </div>
-      </div>
-    </div>`;
-
     return `<div class="card" id="comps-card">
-      <h3>ARV & comps <span class="muted">— from your local database</span></h3>
+      <h3>ARV &amp; comps <span class="muted">— ranked from your other ${otherCount} propert${otherCount === 1 ? "y" : "ies"}</span></h3>
       ${!sqft ? `<p class="warn">Add the subject's square footage to compute comp-based ARV.</p>` : ""}
       ${range.count > 0 ? `<div class="grid cols-3 mb">
         ${stat("Conservative", fmtUSD(range.conservative), "lower comp")}
         ${stat("Expected", fmtUSD(range.expected), "confidence " + range.confidence)}
         ${stat("Aggressive", fmtUSD(range.aggressive), "higher comp")}
       </div>` : ""}
-      <div class="comp-tag">Suggested comps</div>
-      ${sug.pool.length === 0 ? `<p class="faint">No usable comps in your database yet. Add other properties with a sold/list price and sqft.</p>` : `
-      <div class="grid cols-3 mt">${[sug.lower, sug.similar, sug.higher].map(suggestionCard).join("")}</div>`}
-      ${kept.length ? `<div class="comp-tag mt-lg">Kept comps (${kept.length})</div><div class="grid mt">${kept.map(keptRow).join("")}</div>` : ""}
+      <div class="comp-tag">Suggested comps (lower · similar · higher) — keep, replace, or remove each</div>
+      ${pool.length === 0
+        ? `<p class="faint mt">No comparable properties yet. <a href="#/analyze">Import more properties</a> (each comp needs a value + square footage) and they'll be ranked here.</p>`
+        : `<div class="grid cols-3 mt">${card(sel.lower, "lower")}${card(sel.similar, "similar")}${card(sel.higher, "higher")}</div>`}
+      ${excluded.length ? `<div class="hint mt"><button class="btn sm" data-clearexcluded="1">Reset ${excluded.length} removed comp${excluded.length === 1 ? "" : "s"}</button></div>` : ""}
     </div>`;
   }
 
@@ -1464,17 +1798,30 @@
       if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
       bindResults(view, p);
     }));
-    document.querySelectorAll("[data-keepcomp]").forEach((b) => b.addEventListener("click", () => {
-      const refId = b.dataset.keepcomp;
-      const cand = scoreCandidate(p, getProperty(refId));
-      if (cand) { p.comps.push(compFromCandidate(cand)); touch(p); saveState(); rerenderComps(view, p); }
+    const sels = () => (p.compSelections = p.compSelections || { lower: null, similar: null, higher: null });
+    // Keep — pin the current comp to its bracket (toggle off if already pinned).
+    document.querySelectorAll("[data-pincomp]").forEach((b) => b.addEventListener("click", () => {
+      const s = sels(), bracket = b.dataset.pincomp;
+      s[bracket] = s[bracket] === b.dataset.id ? null : b.dataset.id;
+      touch(p); saveState(); rerenderComps(view, p);
     }));
-    document.querySelectorAll("[data-togglecomp]").forEach((b) => b.addEventListener("click", () => {
-      const c = p.comps.find((x) => x.id === b.dataset.togglecomp);
-      if (c) { c.included = c.included === false; touch(p); saveState(); rerenderComps(view, p); }
+    // Replace — choose a different property for that bracket.
+    document.querySelectorAll("[data-replacecomp]").forEach((box) => box.addEventListener("change", () => {
+      sels()[box.dataset.replacecomp] = box.value || null;
+      touch(p); saveState(); rerenderComps(view, p);
     }));
-    document.querySelectorAll("[data-removecomp]").forEach((b) => b.addEventListener("click", () => {
-      p.comps = p.comps.filter((x) => x.id !== b.dataset.removecomp); touch(p); saveState(); rerenderComps(view, p);
+    // Remove — exclude from matching and drop any selection pointing at it.
+    document.querySelectorAll("[data-excludecomp]").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.excludecomp;
+      if (!p.excludedCompIds) p.excludedCompIds = [];
+      if (p.excludedCompIds.indexOf(id) === -1) p.excludedCompIds.push(id);
+      const s = sels();
+      for (const k of ["lower", "similar", "higher"]) if (s[k] === id) s[k] = null;
+      touch(p); saveState(); rerenderComps(view, p);
+    }));
+    document.querySelectorAll("[data-opencomp]").forEach((b) => b.addEventListener("click", () => navigate("property/" + b.dataset.id)));
+    document.querySelectorAll("[data-clearexcluded]").forEach((b) => b.addEventListener("click", () => {
+      p.excludedCompIds = []; touch(p); saveState(); rerenderComps(view, p);
     }));
   }
 
@@ -1764,15 +2111,33 @@
    *  16. VIEW: SETTINGS (assumptions + backup)                            *
    * ===================================================================== */
 
+  const SETTINGS_ASSUME_FIELDS = [
+    ["downPaymentPct", "Down payment %", 0.1], ["purchaseRate", "Purchase rate %", 0.01],
+    ["purchaseTermYears", "Purchase term", 1], ["closingPct", "Closing %", 0.1],
+    ["holdingPct", "Holding %", 0.1], ["refinanceLTV", "Refi LTV %", 0.1],
+    ["refiRate", "Refi rate %", 0.01], ["refiTermYears", "Refi term", 1],
+    ["taxRatePct", "Tax rate %", 0.01], ["insuranceAnnual", "Insurance $/yr", 1],
+    ["managementPct", "Mgmt %", 0.1], ["vacancyPct", "Vacancy %", 0.1],
+    ["maintenancePct", "Maint %", 0.1], ["capexPct", "CapEx %", 0.1],
+    ["arvMultiplier", "ARV multiplier", 0.01], ["defaultRehab", "Default rehab $", 1],
+    ["defaultRent", "Default rent $/mo", 1],
+  ];
+
+  function settingsProfileCard(key, title) {
+    const a = STATE.assumptions[key];
+    const rows = SETTINGS_ASSUME_FIELDS.map(([k, label, step]) =>
+      `<div class="field"><label>${label}</label><input type="number" step="${step}" data-profile="${key}" data-key="${k}" value="${a[k]}" /></div>`
+    ).join("");
+    return `<div class="card" style="margin:0"><h3 style="margin-top:0">${title}</h3><div class="grid cols-3">${rows}</div></div>`;
+  }
+
   function renderSettings(view) {
-    const a = STATE.assumptions;
-    const af = (label, key, step) => `<div class="field"><label>${label}</label><input type="number" step="${step || 1}" data-assume="${key}" value="${a[key]}" /></div>`;
     view.innerHTML = `
       <div class="page-head"><div><h1>Settings</h1><p>Defaults & local backup</p></div></div>
 
       <div class="card">
         <h3>Backup <span class="muted">— everything lives in this browser only</span></h3>
-        <p class="hint">Export a JSON snapshot of every property, comp and setting. Import restores or merges a snapshot on this or another device.</p>
+        <p class="hint">Export a JSON snapshot of every property and setting. Import restores or merges a snapshot on this or another device.</p>
         <div class="flex wrap mt">
           <button class="btn primary" id="backup-export">⤓ Export Backup</button>
           <button class="btn" id="backup-import">⤒ Import Backup</button>
@@ -1782,38 +2147,25 @@
       </div>
 
       <div class="card">
-        <h3>Default assumptions <span class="muted">— applied to new & imported properties</span></h3>
-        <div class="grid cols-4">
-          ${af("Down payment %", "downPaymentPct")}
-          ${af("Purchase rate %", "purchaseRate", 0.01)}
-          ${af("Purchase term", "purchaseTermYears")}
-          ${af("Closing %", "closingPct", 0.1)}
-          ${af("Holding %", "holdingPct", 0.1)}
-          ${af("Refi LTV %", "refinanceLTV", 0.1)}
-          ${af("Refi rate %", "refiRate", 0.01)}
-          ${af("Refi term", "refiTermYears")}
-          ${af("Tax rate %", "taxRatePct", 0.01)}
-          ${af("Insurance $/yr", "insuranceAnnual")}
-          ${af("Mgmt %", "managementPct", 0.1)}
-          ${af("Vacancy %", "vacancyPct", 0.1)}
-          ${af("Maint %", "maintenancePct", 0.1)}
-          ${af("CapEx %", "capexPct", 0.1)}
-          ${af("ARV multiplier", "arvMultiplier", 0.01)}
+        <h3>Default assumptions <span class="muted">— separate profiles seed new & imported properties</span></h3>
+        <div class="grid cols-2 mt">
+          ${settingsProfileCard("singleFamily", "Single Family")}
+          ${settingsProfileCard("multifamily", "Multifamily")}
         </div>
-        <p class="hint mt">These seed new properties only — they don't change properties you've already saved.</p>
+        <p class="hint mt">These seed new & imported properties only — they don't change properties you've already saved.</p>
       </div>
 
       <div class="card">
         <h3>Sample data</h3>
-        <p class="hint">Load a few example properties (incl. sold comps) to explore the tool.</p>
-        <button class="btn mt" id="seed">Load sample properties</button>
+        <p class="hint">Load a few example properties — active deals plus recent sold comps in the same market — to explore the tool.</p>
+        <button class="btn mt" id="seed">Load sample data</button>
       </div>
     `;
     bindCommon(view);
 
-    view.querySelectorAll("[data-assume]").forEach((input) => input.addEventListener("input", () => {
+    view.querySelectorAll("[data-profile][data-key]").forEach((input) => input.addEventListener("input", () => {
       const v = num(input.value);
-      if (v != null) { STATE.assumptions[input.dataset.assume] = v; saveState(); }
+      if (v != null) { STATE.assumptions[input.dataset.profile][input.dataset.key] = v; saveState(); }
     }));
 
     view.querySelector("#backup-export").addEventListener("click", () => {
@@ -1854,27 +2206,35 @@
     });
 
     view.querySelector("#seed").addEventListener("click", () => {
-      seedSamples(); saveState(); toast("Sample properties added."); navigate("properties");
+      seedSamples(); saveState(); toast("Sample data added."); navigate("properties");
     });
   }
 
   function seedSamples() {
+    // One master list: a few active deals + recent sold comps in the same DFW market.
+    const base = { city: "Sherman", state: "TX", zip: "75090", market: "DFW" };
     const mk = (o) => {
       const p = emptyProperty();
-      Object.assign(p, o.top || {});
-      p.brrrr = defaultBrrrr(o.price || 0, STATE.assumptions);
+      Object.assign(p, base, o.top || {});
+      p.propertyType = o.type || "single_family";
+      p.brrrr = defaultBrrrr(o.price || 0, assumptionsForType(p.propertyType));
       if (o.rent != null) p.brrrr.monthlyRent = o.rent;
       if (o.rehab != null) p.brrrr.rehabCosts = o.rehab;
       if (o.arv != null) p.brrrr.arv = o.arv;
+      if (o.soldPrice != null) { p.soldPrice = o.soldPrice; p.soldDate = o.soldDate || ""; p.listingStatus = "Sold"; }
       return p;
     };
-    const samples = [
-      mk({ top: { name: "Maple St Rental", address: "742 Maple St", city: "Sherman", state: "TX", zip: "75090", beds: 3, baths: 2, sqft: 1450, lat: 33.6357, lng: -96.6089, description: "Fully renovated, new kitchen and new flooring throughout. Turnkey.", listingLink: "https://example.com/maple" }, price: 165000, rent: 1850, rehab: 25000, arv: 230000 }),
-      mk({ top: { name: "Oak Ave Fixer", address: "318 Oak Ave", city: "Sherman", state: "TX", zip: "75090", beds: 3, baths: 1, sqft: 1280, lat: 33.642, lng: -96.62, description: "Investor special, dated, needs work. Bring your contractor — value-add." }, price: 119000, rent: 1500, rehab: 45000, arv: 205000 }),
-      mk({ top: { name: "Pine Rd Comp (Sold)", address: "905 Pine Rd", city: "Sherman", state: "TX", zip: "75090", beds: 3, baths: 2, sqft: 1500, lat: 33.63, lng: -96.6, soldPrice: 228000, soldDate: "2026-03-12", description: "Remodeled, updated throughout." } }),
-      mk({ top: { name: "Elm St Comp (Sold)", address: "212 Elm St", city: "Sherman", state: "TX", zip: "75090", beds: 3, baths: 2, sqft: 1380, lat: 33.628, lng: -96.615, soldPrice: 199000, soldDate: "2026-02-02", description: "Original condition, some updates." } }),
+    const rows = [
+      mk({ top: { name: "Maple St Rental", address: "742 Maple St", beds: 3, baths: 2, sqft: 1450, lat: 33.6357, lng: -96.6089, listingStatus: "Active", description: "Fully renovated, new kitchen and new flooring throughout. Turnkey.", listingLink: "https://example.com/maple" }, price: 165000, rent: 1850, rehab: 25000, arv: 230000 }),
+      mk({ top: { name: "Oak Ave Fixer", address: "318 Oak Ave", beds: 3, baths: 1, sqft: 1280, lat: 33.642, lng: -96.62, listingStatus: "Active", description: "Investor special, dated, needs work. Bring your contractor — value-add." }, price: 119000, rent: 1500, rehab: 45000 }),
+      mk({ type: "multifamily", top: { name: "Cedar Duplex", address: "55 Cedar St", units: 2, beds: 4, baths: 2, sqft: 2200, lat: 33.638, lng: -96.611, listingStatus: "Active", description: "Side-by-side duplex, both units updated, long-term tenants." }, price: 240000, rent: 2900, rehab: 20000 }),
+      // Recent sold comps — same list, auto-ranked as comps for the deals above.
+      mk({ top: { name: "905 Pine Rd", address: "905 Pine Rd", beds: 3, baths: 2, sqft: 1500, lat: 33.63, lng: -96.6, description: "Remodeled, updated throughout." }, soldPrice: 228000, soldDate: "2026-03-12" }),
+      mk({ top: { name: "212 Elm St", address: "212 Elm St", beds: 3, baths: 2, sqft: 1380, lat: 33.628, lng: -96.615, description: "Original condition, dated." }, soldPrice: 199000, soldDate: "2026-02-02" }),
+      mk({ top: { name: "640 Birch Ln", address: "640 Birch Ln", beds: 3, baths: 2, sqft: 1420, lat: 33.634, lng: -96.605, description: "Move-in ready, new paint and flooring." }, soldPrice: 215000, soldDate: "2026-04-01" }),
+      mk({ type: "multifamily", top: { name: "88 Cedar Ct", address: "88 Cedar Ct", units: 2, beds: 4, baths: 2, sqft: 2150, lat: 33.639, lng: -96.612, description: "Updated duplex, both units renovated." }, soldPrice: 305000, soldDate: "2026-03-20" }),
     ];
-    for (const s of samples) STATE.properties.unshift(s);
+    for (let i = rows.length - 1; i >= 0; i--) STATE.properties.unshift(rows[i]);
   }
 
   /* ===================================================================== *
