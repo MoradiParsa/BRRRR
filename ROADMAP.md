@@ -6,7 +6,15 @@ offline — no paid APIs, no scraping, no backend.
 ## Done
 
 - Single-file, offline, dependency-free app (`BRRRR_AI_Local.html`).
-- Simplified navigation: Dashboard · Properties · Analyze · Compare · Settings.
+- **Light premium theme** — clean white/off-white financial-software look.
+- Navigation: Dashboard · Import · Properties · Analyze · Compare · Settings.
+- **Renovation Planner** — line items by category that feed the rehab cost (manual override).
+- **Unit-level rent roll** for multifamily (units × rent/unit + other income, or manual total);
+  each multifamily deal is underwritten as one total property.
+- **Clear refinance-after-repair breakdown** (ARV, LTV, rate, term, refinance amount, original
+  payoff, cash recovered, cash left, cash-out surplus, new monthly mortgage) for SF and MF.
+- **Manual comp selection** — search/filter your properties and pick exactly which comps drive
+  the ARV; optional lower/similar/higher suggestions you can keep, replace, or remove.
 - **One master CSV import** — a broad property list, fuzzy header matching, and an
   `extraFields` catch-all so unrecognized columns are kept, not discarded.
 - **Markets**: grouping + filtering (DFW, Houston, College Station, Austin,
@@ -17,13 +25,10 @@ offline — no paid APIs, no scraping, no backend.
   pre-import step and in Settings.
 - BRRRR engine: grade, recommendation, cash flow, DSCR, cap rate, cash-on-cash,
   capital-recovery %, forced equity, break-even rent, sensitivity analysis.
-- **Comps from the same list**: every other property is ranked as a comp (market,
-  city/zip, type, units, beds/baths, sqft, sold-price recency, condition, distance)
-  into a lower / similar / higher pick you can keep, replace, remove, or open — feeding
-  a Conservative / Expected / Aggressive ARV range and the ARV-source toggle.
+- Comp scoring (market, city/zip, type, units, beds/baths, sqft, sold-price recency,
+  condition, distance) powers the optional suggestions and the ranked picker.
 - Rule-based renovation condition (word-boundary keyword matching).
-- Premium UI pass: refined dark theme, KPI dashboard, filter chips, polished cards
-  and empty states.
+- KPI dashboard, market filter chips, polished cards and empty states.
 - Local backup: export / import / merge JSON (legacy comps-DB backups migrate into the
   master list); sample data loader.
 

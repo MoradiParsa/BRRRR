@@ -364,6 +364,9 @@
       newInterestRate: a.refiRate,
       newLoanTerm: a.refiTermYears,
       monthlyRent: null,
+      rentPerUnit: null,
+      otherIncome: null,
+      rentMode: "manual", // "manual" total | "auto" from units × rent/unit + other income
       taxes: p ? Math.round((a.taxRatePct / 100) * p) : null,
       insurance: a.insuranceAnnual,
       management: a.managementPct,
@@ -380,6 +383,11 @@
     return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  // Renovation planner line items (the rehab estimate is built from these).
+  const RENO_CATEGORIES = ["Exterior", "Roof", "HVAC", "Plumbing", "Electrical", "Kitchen", "Bathrooms", "Flooring", "Paint", "Windows", "Landscaping", "Other"];
+  function defaultRenoItems() { return RENO_CATEGORIES.map((category) => ({ category, cost: null, notes: "" })); }
+  function renoTotal(p) { return (p.renoItems || []).reduce((sum, it) => sum + (num(it.cost) || 0), 0); }
+
   function emptyProperty() {
     const now = Date.now();
     return {
@@ -394,12 +402,30 @@
       listingStatus: "", soldPrice: null, soldDate: "",
       queueStatus: "new", inPipeline: false, pipelineStage: "watching",
       arvMode: "manual",
+      rehabMode: "planner", // "planner" total from line items | "manual" rehab override
+      renoItems: defaultRenoItems(),
+      compIds: [],          // manually selected comps — the ONLY comps used for ARV
       brrrr: defaultBrrrr(0),
-      excludedCompIds: [], compSelections: { lower: null, similar: null, higher: null }, extraFields: {},
+      extraFields: {},
     };
   }
 
   /* ------------------------------ resolve inputs ------------------------ */
+  // Total monthly rent from the unit-level rent roll (units × rent/unit + other income).
+  function totalRentRoll(p) {
+    const b = p.brrrr;
+    const units = Math.max(1, num(p.units) || 1);
+    return units * (num(b.rentPerUnit) || 0) + (num(b.otherIncome) || 0);
+  }
+  // Effective total monthly rent fed to the engine (auto rent-roll or manual total).
+  function effectiveRent(p) {
+    return p.brrrr.rentMode === "auto" ? totalRentRoll(p) : (num(p.brrrr.monthlyRent) || 0);
+  }
+  // Effective rehab cost — the renovation planner total unless a manual override is set.
+  function effectiveRehab(p) {
+    return p.rehabMode === "manual" ? (num(p.brrrr.rehabCosts) || 0) : renoTotal(p);
+  }
+
   // Build the engine Inputs from a property, substituting the chosen ARV source.
   function resolveInputs(p) {
     const b = p.brrrr;
@@ -412,9 +438,9 @@
     return {
       purchasePrice: n(b.purchasePrice), purchaseType: b.purchaseType === "cash" ? "cash" : "financed",
       downPayment: n(b.downPayment), purchaseInterestRate: n(b.purchaseInterestRate), purchaseLoanTerm: n(b.purchaseLoanTerm),
-      closingCosts: n(b.closingCosts), holdingCosts: n(b.holdingCosts), rehabCosts: n(b.rehabCosts),
+      closingCosts: n(b.closingCosts), holdingCosts: n(b.holdingCosts), rehabCosts: effectiveRehab(p),
       arv, refinanceLTV: n(b.refinanceLTV), newInterestRate: n(b.newInterestRate), newLoanTerm: n(b.newLoanTerm),
-      monthlyRent: n(b.monthlyRent), taxes: n(b.taxes), insurance: n(b.insurance),
+      monthlyRent: effectiveRent(p), taxes: n(b.taxes), insurance: n(b.insurance),
       management: n(b.management), vacancy: n(b.vacancy), maintenance: n(b.maintenance),
       hoa: n(b.hoa), capexReserve: n(b.capexReserve), utilities: n(b.utilities),
     };
@@ -424,7 +450,7 @@
     const inputs = resolveInputs(p);
     const r = analyze(inputs);
     const s = summarize(inputs, r);
-    const hasDeal = (num(p.brrrr.purchasePrice) || 0) > 0 || inputs.arv > 0 || (num(p.brrrr.monthlyRent) || 0) > 0;
+    const hasDeal = (num(p.brrrr.purchasePrice) || 0) > 0 || inputs.arv > 0 || effectiveRent(p) > 0;
     return {
       inputs, r, s, hasDeal,
       grade: investmentGrade(s.score, s.recommendation),
@@ -583,9 +609,8 @@
 
   // Every other property scored + ranked as a candidate comp for `subject`.
   function compCandidates(subject) {
-    const excluded = new Set(subject.excludedCompIds || []);
     return STATE.properties
-      .filter((c) => c.id !== subject.id && !excluded.has(c.id))
+      .filter((c) => c.id !== subject.id)
       .map((c) => scoreCompProp(subject, c))
       .filter(Boolean)
       .sort((a, b) => b.score - a.score);
@@ -604,37 +629,32 @@
     return { lower, similar, higher };
   }
 
-  // Resolve the three comps for a subject, honoring manual picks (compSelections).
-  function selectComps(subject) {
-    const pool = compCandidates(subject);
-    const auto = autoBrackets(pool);
-    const sel = subject.compSelections || {};
-    const used = new Set();
-    const resolve = (bracket) => {
-      let chosen = null;
-      if (sel[bracket]) {
-        chosen = pool.find((x) => x.c.id === sel[bracket]) || null;
-        if (chosen) chosen.pinned = true;
-      }
-      if (!chosen) chosen = auto[bracket];
-      if (chosen && used.has(chosen.c.id)) chosen = sel[bracket] ? chosen : null; // keep manual dupes, drop auto dupes
-      if (chosen) { chosen.bracket = bracket; used.add(chosen.c.id); }
-      return chosen || null;
-    };
-    const similar = resolve("similar");
-    const lower = resolve("lower");
-    const higher = resolve("higher");
-    return { lower, similar, higher, pool };
+  // Optional suggestion: up to three comps spanning lower / similar / higher value.
+  function suggestThree(subject) {
+    const auto = autoBrackets(compCandidates(subject));
+    return [auto.lower, auto.similar, auto.higher].filter(Boolean);
   }
 
-  // ARV range derived from the three selected comps.
+  // The comps the user has manually selected — the ONLY comps used for ARV.
+  function selectedCompList(subject) {
+    const out = [];
+    for (const id of subject.compIds || []) {
+      const c = getProperty(id);
+      if (!c) continue;
+      const scored = scoreCompProp(subject, c);
+      if (scored) out.push(scored);
+    }
+    // Order by implied value so the lowest reads as the conservative end.
+    return out.sort((a, b) => a.impliedARV - b.impliedARV);
+  }
+
+  // ARV range derived ONLY from the manually selected comps.
   function computeArvRange(p) {
     const sqft = num(p.sqft);
-    const sel = selectComps(p);
-    const three = [sel.lower, sel.similar, sel.higher].filter(Boolean);
-    if (!sqft || three.length === 0) return { conservative: 0, expected: 0, aggressive: 0, confidence: "Low", ppsfLow: 0, ppsfHigh: 0, count: 0 };
+    const sel = selectedCompList(p);
+    if (!sqft || sel.length === 0) return { conservative: 0, expected: 0, aggressive: 0, confidence: "Low", ppsfLow: 0, ppsfHigh: 0, count: 0 };
 
-    const implied = three.map((x) => x.ppsf * renoFactor(x.reno));
+    const implied = sel.map((x) => x.ppsf * renoFactor(x.reno));
     const arvs = implied.map((ppsf) => ppsf * sqft);
     const conservative = Math.min.apply(null, arvs);
     const aggressive = Math.max.apply(null, arvs);
@@ -642,11 +662,11 @@
     const mean = expected;
     const cv = mean > 0 ? Math.sqrt(arvs.reduce((a, b) => a + (b - mean) ** 2, 0) / arvs.length) / mean : 1;
     let confidence = "Medium";
-    if (implied.length >= 3 && cv <= 0.1) confidence = "High";
-    else if (implied.length < 2 || cv > 0.2) confidence = "Low";
+    if (sel.length >= 3 && cv <= 0.1) confidence = "High";
+    else if (sel.length < 2 || cv > 0.2) confidence = "Low";
     return {
       conservative, expected, aggressive, confidence,
-      ppsfLow: Math.min.apply(null, implied), ppsfHigh: Math.max.apply(null, implied), count: implied.length,
+      ppsfLow: Math.min.apply(null, implied), ppsfHigh: Math.max.apply(null, implied), count: sel.length,
     };
   }
 
@@ -700,7 +720,8 @@
     ["sqft", ["square feet", "square footage", "sq ft", "sqft", "living area", "gla", "size"]],
     ["taxes", ["property taxes", "annual tax", "property tax", "taxes", "tax"]],
     ["insurance", ["annual insurance", "hazard insurance", "insurance"]],
-    ["rent", ["monthly rent", "market rent", "estimated rent", "rent estimate", "rent", "rental"]],
+    ["rentPerUnit", ["rent per unit", "per unit rent", "unit rent", "rent/unit", "avg rent", "average rent"]],
+    ["rent", ["monthly rent", "market rent", "estimated rent", "rent estimate", "total rent", "rent", "rental", "gross rent"]],
     ["notes", ["notes", "note", "comments", "comment", "remarks"]],
     ["description", ["public remarks", "description", "details", "marketing", "desc"]],
     ["status", ["listing status", "sale status", "status"]],
@@ -792,12 +813,18 @@
       const taxes = num(get("taxes"));
       const insurance = num(get("insurance"));
       const rent = num(get("rent"));
+      const rentPerUnit = num(get("rentPerUnit"));
       const rehab = num(get("rehabEstimate"));
       const arv = num(get("arv"));
       if (taxes != null) b.taxes = taxes;
       if (insurance != null) b.insurance = insurance;
       b.monthlyRent = rent != null ? rent : (profile.defaultRent || null);
-      b.rehabCosts = rehab != null ? rehab : (profile.defaultRehab || null);
+      // A per-unit rent figure switches the deal to the auto rent roll.
+      if (rentPerUnit != null) { b.rentPerUnit = rentPerUnit; b.rentMode = "auto"; }
+      // Rehab estimate flows into the renovation planner (so it feeds rehab) and the manual field.
+      const rehabVal = rehab != null ? rehab : (profile.defaultRehab || null);
+      b.rehabCosts = rehabVal;
+      if (rehabVal) { const other = p.renoItems.find((it) => it.category === "Other"); if (other) { other.cost = rehabVal; other.notes = "Imported estimate"; } }
       if (arv != null) b.arv = arv;
       p.brrrr = b;
       out.push(p);
@@ -874,18 +901,33 @@
     p.inPipeline = !!x.inPipeline;
     p.pipelineStage = PIPELINE_STAGES.some((s) => s.value === x.pipelineStage) ? x.pipelineStage : "watching";
     p.arvMode = ["manual", "conservative", "expected", "aggressive"].indexOf(x.arvMode) !== -1 ? x.arvMode : "manual";
+    p.rehabMode = x.rehabMode === "manual" ? "manual" : "planner";
+    p.renoItems = sanitizeRenoItems(x.renoItems);
     p.brrrr = Object.assign(defaultBrrrr(0), x.brrrr && typeof x.brrrr === "object" ? x.brrrr : {});
     if (p.brrrr.purchaseType !== "cash") p.brrrr.purchaseType = "financed";
-    p.excludedCompIds = Array.isArray(x.excludedCompIds) ? x.excludedCompIds.filter((id) => typeof id === "string") : [];
-    p.compSelections = sanitizeSelections(x.compSelections);
+    if (p.brrrr.rentMode !== "auto") p.brrrr.rentMode = "manual";
+    // Selected comps (the only comps that feed ARV). Migrate a legacy auto-selection if present.
+    if (Array.isArray(x.compIds)) p.compIds = x.compIds.filter((id) => typeof id === "string");
+    else if (x.compSelections && typeof x.compSelections === "object") {
+      p.compIds = ["lower", "similar", "higher"].map((k) => x.compSelections[k]).filter((id) => typeof id === "string");
+    } else p.compIds = [];
     p.extraFields = x.extraFields && typeof x.extraFields === "object" ? x.extraFields : {};
     return p;
   }
 
-  function sanitizeSelections(x) {
-    const s = { lower: null, similar: null, higher: null };
-    if (x && typeof x === "object") for (const k of ["lower", "similar", "higher"]) if (typeof x[k] === "string") s[k] = x[k];
-    return s;
+  function sanitizeRenoItems(x) {
+    const base = defaultRenoItems();
+    if (Array.isArray(x)) {
+      for (const it of x) {
+        if (!it || typeof it !== "object") continue;
+        const cat = typeof it.category === "string" ? it.category : "Other";
+        const notes = typeof it.notes === "string" ? it.notes : "";
+        const row = base.find((b) => b.category === cat);
+        if (row) { row.cost = num(it.cost); row.notes = notes; }
+        else base.push({ category: cat, cost: num(it.cost), notes: notes });
+      }
+    }
+    return base;
   }
 
   // Migrate a legacy comps-DB record from an old backup into a master-list property.
@@ -947,7 +989,8 @@
     "units", "beds", "baths", "sqft", "lotSize", "yearBuilt", "lat", "lng", "soldPrice",
     "brrrr.purchasePrice", "brrrr.downPayment", "brrrr.purchaseInterestRate", "brrrr.purchaseLoanTerm",
     "brrrr.closingCosts", "brrrr.holdingCosts", "brrrr.rehabCosts", "brrrr.arv", "brrrr.refinanceLTV",
-    "brrrr.newInterestRate", "brrrr.newLoanTerm", "brrrr.monthlyRent", "brrrr.taxes", "brrrr.insurance",
+    "brrrr.newInterestRate", "brrrr.newLoanTerm", "brrrr.monthlyRent", "brrrr.rentPerUnit", "brrrr.otherIncome",
+    "brrrr.taxes", "brrrr.insurance",
     "brrrr.management", "brrrr.vacancy", "brrrr.maintenance", "brrrr.hoa", "brrrr.capexReserve", "brrrr.utilities",
   ]);
 
@@ -981,8 +1024,9 @@
 
   const ROUTES = {
     dashboard: { label: "Dashboard", ico: "▦", render: renderDashboard },
+    import: { label: "Import", ico: "⤓", render: renderImport },
     properties: { label: "Properties", ico: "▤", render: renderProperties },
-    analyze: { label: "Analyze", ico: "⤓", render: renderAnalyze },
+    analyze: { label: "Analyze", ico: "◧", render: renderAnalyzeEntry },
     compare: { label: "Compare", ico: "⇄", render: renderCompare },
     settings: { label: "Settings", ico: "⚙", render: renderSettings },
     // Kept reachable by direct hash link, hidden from the simplified sidebar:
@@ -992,7 +1036,7 @@
   };
 
   // Only these appear in the sidebar, in this order.
-  const NAV_ORDER = ["dashboard", "properties", "analyze", "compare", "settings"];
+  const NAV_ORDER = ["dashboard", "import", "properties", "analyze", "compare", "settings"];
 
   function parseHash() {
     const h = (location.hash || "#/dashboard").replace(/^#\/?/, "");
@@ -1017,7 +1061,7 @@
   function renderShell(route) {
     const navItems = NAV_ORDER.map((key) => {
       const r = ROUTES[key];
-      const active = key === route || (route === "property" && key === "properties") ? " active" : "";
+      const active = key === route || (route === "property" && key === "analyze") ? " active" : "";
       return `<button class="nav-item${active}" data-nav="${key}"><span class="nav-ico">${r.ico}</span><span class="nav-label">${r.label}</span></button>`;
     }).join("");
     return `
@@ -1085,12 +1129,12 @@
       <div class="page-head">
         <div><h1>Dashboard</h1><p>${props.length} propert${props.length === 1 ? "y" : "ies"} · ${withDeal.length} analyzed</p></div>
         <div class="page-actions">
-          <button class="btn" data-go="analyze">⤓ Import CSV</button>
+          <button class="btn" data-go="import">⤓ Import CSV</button>
           <button class="btn primary" data-add="1">+ Add property</button>
         </div>
       </div>
       ${props.length === 0
-        ? emptyState("🏠", "No properties yet", "Import one master CSV and every deal is scored instantly — comps are picked from the same list. Everything stays on this device.", `<button class="btn primary" data-go="analyze">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
+        ? emptyState("🏠", "No properties yet", "Import one master CSV and every deal is scored instantly — comps are picked from the same list. Everything stays on this device.", `<button class="btn primary" data-go="import">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
         : `
       <div class="grid cols-4 kpi-grid">
         ${stat("Properties", props.length, withDeal.length + " analyzed")}
@@ -1154,10 +1198,10 @@
   }
 
   /* ===================================================================== *
-   *  10. VIEW: ANALYZE  (one master CSV → score everything)                *
+   *  10. VIEW: IMPORT  (one master CSV → score everything)                 *
    * ===================================================================== */
 
-  const MASTER_COLS_HINT = "Recognized: address, city, state, zip, market, submarket, price, list price, sold price, beds, baths, sqft, units, property type, rent, taxes, insurance, rehab, ARV, latitude, longitude, listing link, photo link, status, sold date, notes, description.";
+  const MASTER_COLS_HINT = "Recognized: address, city, state, zip, market, submarket, price, list price, sold price, beds, baths, sqft, units, property type, rent, rent per unit, taxes, insurance, rehab estimate, ARV, listing link, photo link, notes, description, renovation notes, sold date, latitude, longitude.";
 
   // The 12 assumptions surfaced on the pre-import step (full set lives in Settings).
   const IMPORT_ASSUME_FIELDS = [
@@ -1171,11 +1215,10 @@
 
   let pendingSubjects = null, pendingSubjectMatch = null, pendingSubjectText = null;
 
-  function renderAnalyze(view) {
-    const nProps = STATE.properties.length;
+  function renderImport(view) {
     view.innerHTML = `
       <div class="page-head">
-        <div><h1>Analyze</h1><p>Import one master CSV — every property is scored, and comps are drawn from the same list.</p></div>
+        <div><h1>Import</h1><p>Import one master CSV — or add a property by hand. Every deal is scored automatically.</p></div>
         <div class="page-actions"><button class="btn" data-add="1">+ Add manually</button></div>
       </div>
 
@@ -1192,13 +1235,33 @@
       </div>
 
       <div class="card">
-        <h3>How comps work now <span class="muted">— no separate comps file</span></h3>
-        <p class="hint" style="margin:0">Import one broad list. When you open a property, the app ranks the <em>other</em> properties as comps — same market, type, size and condition — and suggests a lower / similar / higher comp plus an ARV range. Add a <strong>sold price</strong> and <strong>sold date</strong> to any rows you want treated as solid sold comps.</p>
+        <h3>How comps work <span class="muted">— one list, comps you choose</span></h3>
+        <p class="hint" style="margin:0">Import one broad list of properties. On a property's <strong>Analyze</strong> page you pick which of your other properties to use as comps (with optional lower / similar / higher suggestions) — only the comps you select drive the ARV range. Add a <strong>sold price</strong> and <strong>sold date</strong> to rows you want treated as solid sold comps.</p>
       </div>
     `;
     bindCommon(view);
     bindCsv(view);
     if (pendingSubjects) renderSubjectPreview(view, { properties: pendingSubjects, matched: pendingSubjectMatch });
+  }
+
+  /* ===================================================================== *
+   *  10c. VIEW: ANALYZE  (entry into per-property underwriting)            *
+   * ===================================================================== */
+
+  let activePropertyId = null;
+
+  function renderAnalyzeEntry(view) {
+    const props = STATE.properties;
+    if (!props.length) {
+      view.innerHTML = `<div class="page-head"><div><h1>Analyze</h1><p>Underwrite a single deal end to end.</p></div></div>` +
+        emptyState("📊", "Nothing to analyze yet", "Import a CSV or add a property, then come back here to underwrite it.", `<button class="btn primary" data-go="import">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`);
+      bindCommon(view);
+      return;
+    }
+    const valid = activePropertyId && getProperty(activePropertyId);
+    const id = valid ? activePropertyId : props.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0].id;
+    activePropertyId = id;
+    renderWorkspace(view, id, { fromAnalyze: true });
   }
 
   function bindCsv(view) {
@@ -1360,14 +1423,14 @@
       <div class="page-head">
         <div><h1>Properties</h1><p>${props.length} saved · stored locally${propMarketFilter !== "All" ? ` · showing ${shown.length} in ${esc(propMarketFilter)}` : ""}</p></div>
         <div class="page-actions">
-          <button class="btn" data-go="analyze">⤓ Import CSV</button>
+          <button class="btn" data-go="import">⤓ Import CSV</button>
           <button class="btn primary" data-add="1">+ Add property</button>
         </div>
       </div>
       ${filterBar}
       <div class="card">
         ${props.length === 0
-          ? emptyState("📋", "No properties yet", "Import one master CSV of properties and the app scores every deal — then picks comps from the same list.", `<button class="btn primary" data-go="analyze">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
+          ? emptyState("📋", "No properties yet", "Import one master CSV of properties and the app scores every deal — then picks comps from the same list.", `<button class="btn primary" data-go="import">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
           : (shown.length === 0 ? `<p class="faint">No properties in ${esc(propMarketFilter)}.</p>` : `
         <table>
           <thead><tr><th>Property</th><th>Market</th><th>Type</th><th>Reno</th><th>Grade</th><th class="num">Price</th><th class="num">Cash flow</th><th></th></tr></thead>
@@ -1424,16 +1487,25 @@
    *  11. VIEW: PROPERTY WORKSPACE                                          *
    * ===================================================================== */
 
-  function renderWorkspace(view, id) {
+  function renderWorkspace(view, id, opts) {
+    opts = opts || {};
     const p = getProperty(id);
     if (!p) { view.innerHTML = `<div class="empty">Property not found. <a href="#/properties">Back to list</a></div>`; return; }
+    activePropertyId = p.id;
+
+    // From the Analyze tab: a property switcher; otherwise a back-to-list link.
+    const lead = opts.fromAnalyze
+      ? `<div class="ws-switch"><span class="comp-tag">Analyzing</span>
+          <select id="ws-switch">${STATE.properties.slice().sort((a, b) => b.updatedAt - a.updatedAt).map((q) => `<option value="${q.id}" ${q.id === p.id ? "selected" : ""}>${esc(propTitle(q))}${q.city ? " — " + esc(q.city) : ""}</option>`).join("")}</select>
+        </div>`
+      : `<button class="btn ghost sm" data-go="properties">← Properties</button>`;
 
     view.innerHTML = `
       <div class="page-head">
         <div>
-          <button class="btn ghost sm" data-go="properties">← Properties</button>
+          ${lead}
           <h1 style="margin-top:8px" id="ws-title">${esc(propTitle(p))}</h1>
-          <p id="ws-sub">${esc(cityStateZip(p) || "Add an address below")}</p>
+          <p id="ws-sub">${esc([propertyTypeLabel(p.propertyType), marketOf(p), cityStateZip(p)].filter(Boolean).join(" · ") || "Add an address below")}</p>
         </div>
         <div class="page-actions" id="ws-head-actions"></div>
       </div>
@@ -1445,6 +1517,8 @@
     bindCommon(view);
     bindWorkspace(view, p);
     renderHeadActions(p);
+    const sw = document.getElementById("ws-switch");
+    if (sw) sw.addEventListener("change", () => { activePropertyId = sw.value; render(); });
   }
 
   function renderHeadActions(p) {
@@ -1542,8 +1616,8 @@
           </div>
         </div>
         <div class="field-row">
+          ${field(p.propertyType === "multifamily" ? "Total purchase price ($)" : "Purchase price ($)", "brrrr.purchasePrice", b.purchasePrice)}
           ${field("Down payment ($)", "brrrr.downPayment", b.downPayment)}
-          ${field("Rehab costs ($)", "brrrr.rehabCosts", b.rehabCosts)}
         </div>
         <div class="field-row three">
           ${field("Purchase rate %", "brrrr.purchaseInterestRate", b.purchaseInterestRate, { step: "0.01" })}
@@ -1553,26 +1627,28 @@
         ${field("Holding costs ($)", "brrrr.holdingCosts", b.holdingCosts)}
       </div>
 
-      <div class="section-title">Phase 2 — Refinance & ARV</div>
+      <div class="section-title">Renovation planner</div>
+      <div class="card" id="reno-card">${renoSection(p)}</div>
+
+      <div class="section-title">Phase 2 — Refinance &amp; ARV</div>
       <div class="card" id="arv-card">${arvSection(p)}</div>
 
-      <div class="section-title">Phase 3 — Rental</div>
+      <div class="section-title">Phase 3 — Rental income</div>
       <div class="card">
+        <div id="rent-block">${rentSection(p)}</div>
+        <div class="divider"></div>
         <div class="field-row">
-          ${field("Monthly rent ($)", "brrrr.monthlyRent", b.monthlyRent)}
           ${field("Annual taxes ($)", "brrrr.taxes", b.taxes)}
-        </div>
-        <div class="field-row">
           ${field("Annual insurance ($)", "brrrr.insurance", b.insurance)}
-          ${field("HOA ($/mo)", "brrrr.hoa", b.hoa)}
         </div>
         <div class="field-row three">
           ${field("Mgmt %", "brrrr.management", b.management, { step: "0.1" })}
           ${field("Vacancy %", "brrrr.vacancy", b.vacancy, { step: "0.1" })}
           ${field("Maint %", "brrrr.maintenance", b.maintenance, { step: "0.1" })}
         </div>
-        <div class="field-row">
+        <div class="field-row three">
           ${field("CapEx %", "brrrr.capexReserve", b.capexReserve, { step: "0.1" })}
+          ${field("HOA ($/mo)", "brrrr.hoa", b.hoa)}
           ${field("Utilities ($/mo)", "brrrr.utilities", b.utilities)}
         </div>
       </div>
@@ -1583,8 +1659,68 @@
           ${field("Sold price ($)", "soldPrice", p.soldPrice)}
           ${field("Sold date", "soldDate", p.soldDate, { type: "date" })}
         </div>
-        <div class="hint">Properties with a sold price + sqft become available as comps for your other deals.</div>
+        <div class="hint">A sold price + sqft makes this property a strong comp for your other deals.</div>
       </div>
+    `;
+  }
+
+  // Phase 3 rent: per-unit rent roll (auto total) or a manual total.
+  function rentSection(p) {
+    const b = p.brrrr;
+    const auto = b.rentMode === "auto";
+    const units = Math.max(1, num(p.units) || 1);
+    const total = totalRentRoll(p);
+    return `
+      <div class="flex between wrap">
+        <label style="margin:0">Rent input</label>
+        <div class="mode-toggle" data-renttoggle>
+          <button data-val="auto" class="${auto ? "active" : ""}">Per-unit rent roll</button>
+          <button data-val="manual" class="${auto ? "" : "active"}">Manual total</button>
+        </div>
+      </div>
+      ${auto ? `
+        <div class="hint mt">Using <strong>${units}</strong> unit${units === 1 ? "" : "s"} from Property details above.</div>
+        <div class="field-row mt">
+          ${field("Rent / unit ($/mo)", "brrrr.rentPerUnit", b.rentPerUnit)}
+          ${field("Other income ($/mo)", "brrrr.otherIncome", b.otherIncome)}
+        </div>
+        <div class="kv"><span class="k">Total monthly rent</span><span class="v" id="rent-total">${fmtUSD(total)}</span></div>
+      ` : `
+        <div class="field mt">${field("Total monthly rent ($)", "brrrr.monthlyRent", b.monthlyRent)}</div>
+        <div class="kv"><span class="k">Used in analysis</span><span class="v" id="rent-total">${fmtUSD(effectiveRent(p))}</span></div>
+      `}
+    `;
+  }
+
+  // Renovation planner: line items feed the rehab cost unless a manual override is set.
+  function renoSection(p) {
+    const manual = p.rehabMode === "manual";
+    const total = renoTotal(p);
+    const rows = (p.renoItems || []).map((it, i) => `
+      <div class="reno-row">
+        <span class="reno-cat">${esc(it.category)}</span>
+        <input type="number" step="1" data-reno="${i}" data-renofield="cost" value="${it.cost == null ? "" : it.cost}" placeholder="0" />
+        <input type="text" data-reno="${i}" data-renofield="notes" value="${attr(it.notes)}" placeholder="notes" />
+      </div>`).join("");
+    return `
+      <div class="flex between wrap">
+        <label style="margin:0">Rehab source</label>
+        <div class="mode-toggle" data-rehabtoggle>
+          <button data-val="planner" class="${manual ? "" : "active"}">Planner total</button>
+          <button data-val="manual" class="${manual ? "active" : ""}">Manual override</button>
+        </div>
+      </div>
+      ${manual ? `
+        <div class="field mt">${field("Rehab costs — total ($)", "brrrr.rehabCosts", p.brrrr.rehabCosts)}</div>
+        <div class="hint">Planner total (${fmtUSD(total)}) is ignored while manual override is on.</div>
+      ` : `
+        <div class="reno-list mt">
+          <div class="reno-row reno-head"><span class="reno-cat">Item</span><span>Cost</span><span>Notes</span></div>
+          ${rows}
+        </div>
+        <div class="kv mt"><span class="k">Total renovation estimate</span><span class="v" id="reno-total">${fmtUSD(total)}</span></div>
+        <div class="hint">This total feeds the BRRRR rehab cost.</div>
+      `}
     `;
   }
 
@@ -1594,11 +1730,11 @@
     const opt = (val, label, arv) => `<button class="btn sm ${p.arvMode === val ? "primary" : ""}" data-arvmode="${val}" ${arv ? "" : "disabled"}>${label}${arv ? ` · ${fmtUSD(arv)}` : ""}</button>`;
     return `
       <div class="field-row three">
-        ${field("Manual ARV ($)", "brrrr.arv", b.arv)}
-        ${field("Refi LTV %", "brrrr.refinanceLTV", b.refinanceLTV, { step: "0.1" })}
-        ${field("Refi rate %", "brrrr.newInterestRate", b.newInterestRate, { step: "0.01" })}
+        ${field(p.propertyType === "multifamily" ? "Manual total ARV ($)" : "Manual ARV ($)", "brrrr.arv", b.arv)}
+        ${field("Refinance LTV %", "brrrr.refinanceLTV", b.refinanceLTV, { step: "0.1" })}
+        ${field("Refinance rate %", "brrrr.newInterestRate", b.newInterestRate, { step: "0.01" })}
       </div>
-      ${field("Refi term (yrs)", "brrrr.newLoanTerm", b.newLoanTerm)}
+      ${field("Loan term (yrs)", "brrrr.newLoanTerm", b.newLoanTerm)}
       <div class="divider"></div>
       <label>ARV source feeding the calculator</label>
       <div class="flex wrap" data-arvmodes>
@@ -1607,7 +1743,7 @@
         ${opt("expected", "Expected", range.expected)}
         ${opt("aggressive", "Aggressive", range.aggressive)}
       </div>
-      ${range.count > 0 ? `<div class="hint mt">Comp range from ${range.count} comp${range.count === 1 ? "" : "s"} · confidence ${range.confidence} · $${fmtInt(range.ppsfLow)}–$${fmtInt(range.ppsfHigh)}/sqft</div>` : `<div class="hint mt">Import more properties (ideally with a sold price + sqft) to unlock comp-based ARV — comps are drawn from your other properties.</div>`}
+      ${range.count > 0 ? `<div class="hint mt">Range from ${range.count} selected comp${range.count === 1 ? "" : "s"} · confidence ${range.confidence} · $${fmtInt(range.ppsfLow)}–$${fmtInt(range.ppsfHigh)}/sqft</div>` : `<div class="hint mt">Select comps in the “ARV &amp; comps” panel to unlock Conservative / Expected / Aggressive ARV.</div>`}
     `;
   }
 
@@ -1632,19 +1768,37 @@
           ${miniStat("Capital recovered", fmtPct(m.capitalRecoveryPct))}
         </div>
         <div class="mt">
-          <div class="kv"><span class="k">ARV used (${p.arvMode})</span><span class="v">${fmtUSD(m.arv)}</span></div>
+          <div class="kv"><span class="k">Total project cost</span><span class="v">${fmtUSD(r.totalProjectCost)}</span></div>
           <div class="kv"><span class="k">Cash invested</span><span class="v">${fmtUSD(r.cashInvested)}</span></div>
-          <div class="kv"><span class="k">Cash left in deal</span><span class="v">${fmtUSD(r.cashLeftInDeal)}</span></div>
-          <div class="kv"><span class="k">Cash out surplus</span><span class="v">${fmtUSD(r.cashOutSurplus)}</span></div>
-          <div class="kv"><span class="k">New mortgage</span><span class="v">${fmtUSD(r.newMonthlyPayment)}/mo</span></div>
           <div class="kv"><span class="k">Forced equity</span><span class="v">${fmtUSD(r.equityCreated)}</span></div>
+          <div class="kv"><span class="k">Monthly rent used</span><span class="v">${fmtUSD(m.inputs.monthlyRent)}/mo</span></div>
           <div class="kv"><span class="k">Break-even rent</span><span class="v">${fmtUSD(r.breakEvenRent)}</span></div>
         </div>`}
       </div>
+      ${m.hasDeal ? refinanceCard(p, m) : ""}
       ${m.hasDeal ? findingsCard(m.s) : ""}
       ${m.hasDeal ? compsCard(p) : ""}
       ${m.hasDeal ? sensitivityCard(m.inputs) : ""}
     `;
+  }
+
+  // Refinance-after-repair breakdown — applies to single-family and multifamily alike.
+  function refinanceCard(p, m) {
+    const r = m.r;
+    const inp = m.inputs;
+    return `<div class="card">
+      <h3>Refinance after repair <span class="muted">— ARV source: ${p.arvMode}</span></h3>
+      <div class="kv"><span class="k">After Repair Value</span><span class="v">${fmtUSD(m.arv)}</span></div>
+      <div class="kv"><span class="k">Refinance LTV</span><span class="v">${fmtPct(inp.refinanceLTV)}</span></div>
+      <div class="kv"><span class="k">Refinance interest rate</span><span class="v">${fmtPct(inp.newInterestRate, 2)}</span></div>
+      <div class="kv"><span class="k">Loan term</span><span class="v">${fmtInt(inp.newLoanTerm)} yrs</span></div>
+      <div class="kv"><span class="k">Refinance amount</span><span class="v">${fmtUSD(r.refinanceAmount)}</span></div>
+      <div class="kv"><span class="k">Original loan payoff</span><span class="v">${fmtUSD(r.originalLoanPayoff)}</span></div>
+      <div class="kv"><span class="k">Cash recovered</span><span class="v good">${fmtUSD(r.capitalRecovered)}</span></div>
+      <div class="kv"><span class="k">Cash left in deal</span><span class="v ${r.cashLeftInDeal > 0 ? "warn" : "good"}">${fmtUSD(r.cashLeftInDeal)}</span></div>
+      <div class="kv"><span class="k">Cash-out surplus</span><span class="v ${r.cashOutSurplus > 0 ? "good" : ""}">${fmtUSD(r.cashOutSurplus)}</span></div>
+      <div class="kv"><span class="k">New monthly mortgage</span><span class="v">${fmtUSD(r.newMonthlyPayment)}/mo</span></div>
+    </div>`;
   }
 
   function miniStat(k, v) { return `<div class="stat"><div class="k">${k}</div><div class="v" style="font-size:16px">${v}</div></div>`; }
@@ -1675,104 +1829,174 @@
     </div>`;
   }
 
+  /* -------------------------- comp selection UI ------------------------- */
+  let compFilterText = "", compFilterType = "all", compFilterMarket = "all";
+
+  function compFilterPass(x) {
+    if (compFilterType !== "all" && (x.c.propertyType || "single_family") !== compFilterType) return false;
+    if (compFilterMarket !== "all" && marketOf(x.c) !== compFilterMarket) return false;
+    if (compFilterText) {
+      const hay = [propTitle(x.c), x.c.address, x.c.city, x.c.zip, marketOf(x.c)].join(" ").toLowerCase();
+      if (hay.indexOf(compFilterText.toLowerCase()) === -1) return false;
+    }
+    return true;
+  }
+  function filteredCandidates(p) {
+    const selSet = new Set((p.compIds || []).filter((id) => getProperty(id)));
+    return compCandidates(p).filter((x) => !selSet.has(x.c.id) && compFilterPass(x)).slice(0, 40);
+  }
+  function pickerRowHtml(x) {
+    const c = x.c;
+    const sub = [marketOf(c), cityStateZip(c) || "—", propertyTypeLabel(c.propertyType) + (c.units > 1 ? " " + c.units + "u" : ""),
+      (c.beds == null ? "—" : c.beds) + "bd/" + (c.baths == null ? "—" : c.baths) + "ba", fmtInt(x.sqft) + " sqft",
+      (x.sold ? "sold " : "") + fmtUSD(x.value), x.condition].join(" · ");
+    return `<div class="picker-row">
+      <div class="picker-main"><div class="prop-name">${esc(propTitle(c))}</div><div class="prop-sub">${esc(sub)}</div></div>
+      <span class="pill">match ${x.score}</span>
+      <button class="btn sm primary" data-addcomp="${c.id}">Add</button>
+    </div>`;
+  }
+
   function compsCard(p) {
-    const sel = selectComps(p);
     const sqft = num(p.sqft);
     const range = computeArvRange(p);
-    const pool = sel.pool;
-    const excluded = p.excludedCompIds || [];
-    const otherCount = STATE.properties.length - 1;
+    const candidates = compCandidates(p);
+    const candCount = candidates.length;
+    const selectedIds = (p.compIds || []).filter((id) => getProperty(id));
+    const selected = selectedCompList(p); // sorted by implied value (low → high)
+    const n = selected.length;
+    const replaceOptions = (currentId) => candidates.map((o) =>
+      `<option value="${o.c.id}" ${o.c.id === currentId ? "selected" : ""}>${esc(propTitle(o.c))} · ${fmtUSD(o.value)} · match ${o.score}</option>`).join("");
 
-    // <option> list of every candidate property, for the Replace dropdown.
-    const optionsFor = (currentId) => pool.map((o) =>
-      `<option value="${o.c.id}" ${o.c.id === currentId ? "selected" : ""}>${esc(propTitle(o.c))} · ${fmtUSD(o.value)} · match ${o.score}</option>`
-    ).join("");
-
-    const card = (x, bracket) => {
-      if (!x) {
-        if (pool.length === 0) return `<div class="comp-card ${bracket} comp-empty"><span class="comp-tag">${bracket} comp</span><p class="faint mt" style="margin-bottom:0">No candidate.</p></div>`;
-        return `<div class="comp-card ${bracket} comp-empty">
-          <span class="comp-tag">${bracket} comp</span>
-          <p class="faint mt">No auto match for this bracket.</p>
-          <label class="comp-swap"><span>Pick a comp</span>
-            <select data-replacecomp="${bracket}"><option value="">Choose…</option>${optionsFor(null)}</select>
-          </label>
-        </div>`;
-      }
+    const selCard = (x, i) => {
       const c = x.c;
+      const bracket = n <= 1 ? "similar" : i === 0 ? "lower" : i === n - 1 ? "higher" : "similar";
+      const label = n <= 1 ? "comp" : bracket + " comp";
       return `<div class="comp-card ${bracket}">
-        <div class="flex between"><span class="comp-tag">${bracket} comp</span><span class="pill">${x.pinned ? "📌 kept" : "match " + x.score}</span></div>
+        <div class="flex between"><span class="comp-tag">${label}</span><span class="pill">match ${x.score}</span></div>
         <div class="prop-name mt">${esc(propTitle(c))}</div>
-        <div class="prop-sub">${esc(cityStateZip(c) || marketOf(c))}</div>
+        <div class="prop-sub">${esc(c.address || cityStateZip(c) || "—")}</div>
+        <div class="comp-facts mt">
+          <span class="pill">${esc(marketOf(c))}</span>
+          <span class="pill">${propertyTypeLabel(c.propertyType)}${c.units > 1 ? " · " + c.units + "u" : ""}</span>
+          <span class="badge ${renoBadgeClass(x.condition)}">${x.condition}</span>
+        </div>
         <div class="grid cols-2 mt">
-          ${miniStat(x.sold ? "Sold price" : "Value", fmtUSD(x.value))}
+          ${miniStat(x.sold ? "Sold price" : "List / value", fmtUSD(x.value))}
           ${miniStat("$/sqft", "$" + fmtInt(x.ppsf))}
         </div>
-        <div class="hint mt">${fmtInt(x.sqft)} sqft · ${c.beds == null ? "—" : c.beds}bd/${c.baths == null ? "—" : c.baths}ba · ${x.condition}${x.dist != null ? " · " + x.dist.toFixed(1) + " mi" : ""}${c.soldDate ? " · sold " + esc(c.soldDate) : ""}</div>
+        <div class="hint mt">${esc(cityStateZip(c) || "—")} · ${c.beds == null ? "—" : c.beds}bd/${c.baths == null ? "—" : c.baths}ba · ${fmtInt(x.sqft)} sqft${x.dist != null ? " · " + x.dist.toFixed(1) + " mi" : ""}${c.soldDate ? " · sold " + esc(c.soldDate) : ""}</div>
         ${sqft ? `<div class="hint">Implies ARV ≈ ${fmtUSD(x.impliedARV)}</div>` : ""}
-        <div class="comp-why">Why: ${esc(x.why.join(" · ") || "best available match")}</div>
-        <label class="comp-swap mt"><span>Replace</span>
-          <select data-replacecomp="${bracket}">${optionsFor(c.id)}</select>
-        </label>
+        <div class="comp-why">Why: ${esc(x.why.join(" · ") || "selected comp")}</div>
+        <label class="comp-swap mt"><span>Replace</span><select data-replacecomp="${c.id}">${replaceOptions(c.id)}</select></label>
         <div class="comp-actions mt">
-          <button class="btn sm ${x.pinned ? "primary" : ""}" data-pincomp="${bracket}" data-id="${c.id}">${x.pinned ? "✓ Kept" : "Keep"}</button>
-          <button class="btn sm danger" data-excludecomp="${c.id}">Remove</button>
-          ${c.listingLink ? `<a class="btn sm" href="${attr(c.listingLink)}" target="_blank" rel="noopener">Listing ↗</a>` : ""}
-          ${c.photosLink ? `<a class="btn sm" href="${attr(c.photosLink)}" target="_blank" rel="noopener">Photos ↗</a>` : ""}
+          <button class="btn sm danger" data-removecomp="${c.id}">Remove</button>
+          ${c.listingLink ? `<a class="btn sm" href="${attr(c.listingLink)}" target="_blank" rel="noopener">Link ↗</a>` : ""}
+          ${c.photosLink ? `<a class="btn sm" href="${attr(c.photosLink)}" target="_blank" rel="noopener">Photo ↗</a>` : ""}
           <button class="btn sm ghost" data-opencomp="${c.id}">Open</button>
         </div>
       </div>`;
     };
 
+    const marketOptions = ["all"].concat(Array.from(new Set(candidates.map((x) => marketOf(x.c)))))
+      .map((m) => `<option value="${attr(m)}" ${compFilterMarket === m ? "selected" : ""}>${m === "all" ? "All markets" : esc(m)}</option>`).join("");
+    const filtered = filteredCandidates(p);
+
     return `<div class="card" id="comps-card">
-      <h3>ARV &amp; comps <span class="muted">— ranked from your other ${otherCount} propert${otherCount === 1 ? "y" : "ies"}</span></h3>
-      ${!sqft ? `<p class="warn">Add the subject's square footage to compute comp-based ARV.</p>` : ""}
-      ${range.count > 0 ? `<div class="grid cols-3 mb">
-        ${stat("Conservative", fmtUSD(range.conservative), "lower comp")}
+      <div class="flex between wrap">
+        <h3 style="margin:0">ARV &amp; comps <span class="muted">— ${selectedIds.length} selected · ${candCount} available</span></h3>
+        ${candCount ? `<button class="btn sm" data-suggest3="1">✨ Suggest 3</button>` : ""}
+      </div>
+      ${!sqft ? `<p class="warn mt">Add the subject's square footage to compute comp-based ARV.</p>` : ""}
+      ${range.count > 0 ? `<div class="grid cols-3 mb mt">
+        ${stat("Conservative", fmtUSD(range.conservative), "lowest comp")}
         ${stat("Expected", fmtUSD(range.expected), "confidence " + range.confidence)}
-        ${stat("Aggressive", fmtUSD(range.aggressive), "higher comp")}
+        ${stat("Aggressive", fmtUSD(range.aggressive), "highest comp")}
       </div>` : ""}
-      <div class="comp-tag">Suggested comps (lower · similar · higher) — keep, replace, or remove each</div>
-      ${pool.length === 0
-        ? `<p class="faint mt">No comparable properties yet. <a href="#/analyze">Import more properties</a> (each comp needs a value + square footage) and they'll be ranked here.</p>`
-        : `<div class="grid cols-3 mt">${card(sel.lower, "lower")}${card(sel.similar, "similar")}${card(sel.higher, "higher")}</div>`}
-      ${excluded.length ? `<div class="hint mt"><button class="btn sm" data-clearexcluded="1">Reset ${excluded.length} removed comp${excluded.length === 1 ? "" : "s"}</button></div>` : ""}
+
+      <div class="comp-tag mt">Selected comps — only these drive the ARV</div>
+      ${n === 0
+        ? `<p class="faint mt">No comps selected. ${candCount ? `Use <strong>Suggest 3</strong> or add from your properties below.` : `<a href="#/import">Import more properties</a> (each comp needs a value + sqft) to choose comps.`}</p>`
+        : `<div class="grid cols-3 mt">${selected.map(selCard).join("")}</div>`}
+
+      ${candCount ? `
+      <div class="divider"></div>
+      <div class="comp-tag">Add comps from your properties</div>
+      <div class="comp-filters mt">
+        <input type="text" id="comp-search" placeholder="Search address, city, ZIP, market…" value="${attr(compFilterText)}" />
+        <select id="comp-type">
+          <option value="all" ${compFilterType === "all" ? "selected" : ""}>All types</option>
+          <option value="single_family" ${compFilterType === "single_family" ? "selected" : ""}>Single Family</option>
+          <option value="multifamily" ${compFilterType === "multifamily" ? "selected" : ""}>Multifamily</option>
+        </select>
+        <select id="comp-market">${marketOptions}</select>
+      </div>
+      <div class="picker-list mt" id="comp-picker-list">
+        ${filtered.length ? filtered.map(pickerRowHtml).join("") : `<p class="faint">No candidates match the filter.</p>`}
+      </div>` : ""}
     </div>`;
   }
 
-  function bindWorkspace(view, p) {
-    const recompute = () => {
-      const results = document.getElementById("ws-results");
-      if (results) results.innerHTML = workspaceResults(p);
-      bindResults(view, p);
-      const title = document.getElementById("ws-title");
-      const sub = document.getElementById("ws-sub");
-      if (title) title.textContent = propTitle(p);
-      if (sub) sub.textContent = cityStateZip(p) || "Add an address below";
-    };
+  /* ----------------------------- workspace binders ---------------------- */
+  function rerenderResults(view, p) {
+    const results = document.getElementById("ws-results");
+    if (results) { results.innerHTML = workspaceResults(p); bindResults(view, p); }
+  }
+  function rerenderComps(view, p) {
+    rerenderResults(view, p);
+    const arvCard = document.getElementById("arv-card");
+    if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
+  }
+  function refreshHeader(p) {
+    const title = document.getElementById("ws-title");
+    const sub = document.getElementById("ws-sub");
+    if (title) title.textContent = propTitle(p);
+    if (sub) sub.textContent = [propertyTypeLabel(p.propertyType), marketOf(p), cityStateZip(p)].filter(Boolean).join(" · ") || "Add an address below";
+  }
+  function refreshFormTotals(p) {
+    const rt = document.getElementById("rent-total");
+    if (rt) rt.textContent = p.brrrr.rentMode === "auto" ? fmtUSD(totalRentRoll(p)) : fmtUSD(effectiveRent(p));
+    const nt = document.getElementById("reno-total");
+    if (nt) nt.textContent = fmtUSD(renoTotal(p));
+  }
 
-    view.querySelectorAll("[data-field]").forEach((input) => {
-      const path = input.dataset.field;
-      input.addEventListener("input", () => {
-        let val = input.value;
-        if (NUMERIC_FIELDS.has(path) && input.type === "number") val = input.value === "" ? null : num(input.value);
-        setPath(p, path, val);
-        touch(p); saveState();
-        // Re-detect reno inline + refresh results.
-        if (path === "notes" || path === "description" || path === "renovationNotes") refreshRenoLine(p);
-        recompute();
-      });
+  // Shared [data-field] input binder.
+  function bindFieldInput(input, view, p) {
+    const path = input.dataset.field;
+    input.addEventListener("input", () => {
+      let val = input.value;
+      if (NUMERIC_FIELDS.has(path) && input.type === "number") val = input.value === "" ? null : num(input.value);
+      setPath(p, path, val);
+      touch(p); saveState();
+      if (path === "notes" || path === "description" || path === "renovationNotes") refreshRenoLine(p);
+      rerenderResults(view, p);
+      refreshHeader(p);
+      refreshFormTotals(p);
     });
+  }
 
+  function bindWorkspace(view, p) {
+    // Generic fields, except those owned by the self-re-rendering sub-cards.
+    view.querySelectorAll("[data-field]").forEach((input) => {
+      if (input.closest("#arv-card, #rent-block, #reno-card")) return;
+      bindFieldInput(input, view, p);
+    });
     view.querySelectorAll("[data-toggle]").forEach((tg) => {
       tg.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", () => {
         setPath(p, tg.dataset.toggle, btn.dataset.val);
         tg.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
-        touch(p); saveState(); recompute();
+        touch(p); saveState();
+        rerenderResults(view, p); refreshHeader(p);
+        // Property type can change MF labels in sub-cards.
+        rerenderRentBlock(view, p); rerenderRenoCard(view, p);
+        const arvCard = document.getElementById("arv-card");
+        if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
       }));
     });
-
+    bindArvCard(view, p);
+    bindRentBlock(view, p);
+    bindRenoCard(view, p);
     bindResults(view, p);
   }
 
@@ -1786,72 +2010,94 @@
       ${reno.matched.length ? `<span class="hint">matched: ${esc(reno.matched.join(", "))}</span>` : ""}`;
   }
 
-  // (Re)bind handlers that live inside the results column (ARV modes, comps).
+  function bindArvCard(view, p) {
+    const card = document.getElementById("arv-card");
+    if (!card) return;
+    card.querySelectorAll("[data-field]").forEach((input) => bindFieldInput(input, view, p));
+  }
+
+  function rerenderRentBlock(view, p) {
+    const block = document.getElementById("rent-block");
+    if (block) { block.innerHTML = rentSection(p); bindRentBlock(view, p); }
+  }
+  function bindRentBlock(view, p) {
+    const block = document.getElementById("rent-block");
+    if (!block) return;
+    block.querySelectorAll("[data-renttoggle] button").forEach((btn) => btn.addEventListener("click", () => {
+      p.brrrr.rentMode = btn.dataset.val === "auto" ? "auto" : "manual";
+      touch(p); saveState();
+      rerenderRentBlock(view, p); rerenderResults(view, p);
+    }));
+    block.querySelectorAll("[data-field]").forEach((input) => bindFieldInput(input, view, p));
+  }
+
+  function rerenderRenoCard(view, p) {
+    const card = document.getElementById("reno-card");
+    if (card) { card.innerHTML = renoSection(p); bindRenoCard(view, p); }
+  }
+  function bindRenoCard(view, p) {
+    const card = document.getElementById("reno-card");
+    if (!card) return;
+    card.querySelectorAll("[data-rehabtoggle] button").forEach((btn) => btn.addEventListener("click", () => {
+      p.rehabMode = btn.dataset.val === "manual" ? "manual" : "planner";
+      touch(p); saveState();
+      rerenderRenoCard(view, p); rerenderResults(view, p);
+    }));
+    card.querySelectorAll("[data-reno]").forEach((input) => input.addEventListener("input", () => {
+      const i = +input.dataset.reno, f = input.dataset.renofield;
+      if (!p.renoItems[i]) return;
+      p.renoItems[i][f] = f === "cost" ? (input.value === "" ? null : num(input.value)) : input.value;
+      touch(p); saveState();
+      const nt = document.getElementById("reno-total"); if (nt) nt.textContent = fmtUSD(renoTotal(p));
+      rerenderResults(view, p);
+    }));
+    card.querySelectorAll("[data-field]").forEach((input) => bindFieldInput(input, view, p));
+  }
+
+  function refreshPickerList(view, p) {
+    const list = document.getElementById("comp-picker-list");
+    if (!list) return;
+    const filtered = filteredCandidates(p);
+    list.innerHTML = filtered.length ? filtered.map(pickerRowHtml).join("") : `<p class="faint">No candidates match the filter.</p>`;
+    list.querySelectorAll("[data-addcomp]").forEach((b) => b.addEventListener("click", () => addComp(view, p, b.dataset.addcomp)));
+  }
+
+  function addComp(view, p, id) {
+    if (!getProperty(id)) return;
+    p.compIds = p.compIds || [];
+    if (p.compIds.indexOf(id) === -1) p.compIds.push(id);
+    touch(p); saveState(); rerenderComps(view, p);
+  }
+
+  // (Re)bind handlers inside the results column: ARV source + comp selection.
   function bindResults(view, p) {
     document.querySelectorAll("[data-arvmode]").forEach((b) => b.addEventListener("click", () => {
       if (b.disabled) return;
-      p.arvMode = b.dataset.arvmode; touch(p); saveState();
-      const results = document.getElementById("ws-results");
-      if (results) results.innerHTML = workspaceResults(p);
-      // also refresh the ARV source buttons in the form
-      const arvCard = document.getElementById("arv-card");
-      if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
-      bindResults(view, p);
+      p.arvMode = b.dataset.arvmode; touch(p); saveState(); rerenderComps(view, p);
     }));
-    const sels = () => (p.compSelections = p.compSelections || { lower: null, similar: null, higher: null });
-    // Keep — pin the current comp to its bracket (toggle off if already pinned).
-    document.querySelectorAll("[data-pincomp]").forEach((b) => b.addEventListener("click", () => {
-      const s = sels(), bracket = b.dataset.pincomp;
-      s[bracket] = s[bracket] === b.dataset.id ? null : b.dataset.id;
+    document.querySelectorAll("[data-suggest3]").forEach((b) => b.addEventListener("click", () => {
+      p.compIds = suggestThree(p).map((x) => x.c.id);
       touch(p); saveState(); rerenderComps(view, p);
     }));
-    // Replace — choose a different property for that bracket.
+    document.querySelectorAll("[data-addcomp]").forEach((b) => b.addEventListener("click", () => addComp(view, p, b.dataset.addcomp)));
+    document.querySelectorAll("[data-removecomp]").forEach((b) => b.addEventListener("click", () => {
+      p.compIds = (p.compIds || []).filter((id) => id !== b.dataset.removecomp);
+      touch(p); saveState(); rerenderComps(view, p);
+    }));
     document.querySelectorAll("[data-replacecomp]").forEach((box) => box.addEventListener("change", () => {
-      sels()[box.dataset.replacecomp] = box.value || null;
+      const oldId = box.dataset.replacecomp, newId = box.value;
+      if (!newId || newId === oldId) return;
+      p.compIds = (p.compIds || []).map((id) => (id === oldId ? newId : id)).filter((id, i, a) => a.indexOf(id) === i);
       touch(p); saveState(); rerenderComps(view, p);
     }));
-    // Remove — exclude from matching and drop any selection pointing at it.
-    document.querySelectorAll("[data-excludecomp]").forEach((b) => b.addEventListener("click", () => {
-      const id = b.dataset.excludecomp;
-      if (!p.excludedCompIds) p.excludedCompIds = [];
-      if (p.excludedCompIds.indexOf(id) === -1) p.excludedCompIds.push(id);
-      const s = sels();
-      for (const k of ["lower", "similar", "higher"]) if (s[k] === id) s[k] = null;
-      touch(p); saveState(); rerenderComps(view, p);
-    }));
-    document.querySelectorAll("[data-opencomp]").forEach((b) => b.addEventListener("click", () => navigate("property/" + b.dataset.id)));
-    document.querySelectorAll("[data-clearexcluded]").forEach((b) => b.addEventListener("click", () => {
-      p.excludedCompIds = []; touch(p); saveState(); rerenderComps(view, p);
-    }));
-  }
+    document.querySelectorAll("[data-opencomp]").forEach((b) => b.addEventListener("click", () => navigate("property/" + b.dataset.opencomp)));
 
-  function rerenderComps(view, p) {
-    const results = document.getElementById("ws-results");
-    if (results) results.innerHTML = workspaceResults(p);
-    const arvCard = document.getElementById("arv-card");
-    if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
-    bindResults(view, p);
-  }
-
-  function bindArvCard(view, p) {
-    const arvInput = document.querySelector('[data-field="brrrr.arv"]');
-    if (arvInput) arvInput.addEventListener("input", () => {
-      setPath(p, "brrrr.arv", arvInput.value === "" ? null : num(arvInput.value));
-      touch(p); saveState();
-      const results = document.getElementById("ws-results");
-      if (results) results.innerHTML = workspaceResults(p);
-      bindResults(view, p);
-    });
-    document.querySelectorAll('[data-field^="brrrr.refinanceLTV"],[data-field^="brrrr.newInterestRate"],[data-field^="brrrr.newLoanTerm"]').forEach((input) => {
-      input.addEventListener("input", () => {
-        const path = input.dataset.field;
-        setPath(p, path, input.value === "" ? null : num(input.value));
-        touch(p); saveState();
-        const results = document.getElementById("ws-results");
-        if (results) results.innerHTML = workspaceResults(p);
-        bindResults(view, p);
-      });
-    });
+    const search = document.getElementById("comp-search");
+    if (search) search.addEventListener("input", () => { compFilterText = search.value; refreshPickerList(view, p); });
+    const typeSel = document.getElementById("comp-type");
+    if (typeSel) typeSel.addEventListener("change", () => { compFilterType = typeSel.value; refreshPickerList(view, p); });
+    const mktSel = document.getElementById("comp-market");
+    if (mktSel) mktSel.addEventListener("change", () => { compFilterMarket = mktSel.value; refreshPickerList(view, p); });
   }
 
   /* ===================================================================== *
@@ -2219,22 +2465,32 @@
       p.propertyType = o.type || "single_family";
       p.brrrr = defaultBrrrr(o.price || 0, assumptionsForType(p.propertyType));
       if (o.rent != null) p.brrrr.monthlyRent = o.rent;
-      if (o.rehab != null) p.brrrr.rehabCosts = o.rehab;
+      if (o.rehab != null) {
+        p.brrrr.rehabCosts = o.rehab;
+        const other = p.renoItems.find((it) => it.category === "Other");
+        if (other) { other.cost = o.rehab; other.notes = "Estimate"; }
+      }
       if (o.arv != null) p.brrrr.arv = o.arv;
       if (o.soldPrice != null) { p.soldPrice = o.soldPrice; p.soldDate = o.soldDate || ""; p.listingStatus = "Sold"; }
       return p;
     };
-    const rows = [
+    const subjects = [
       mk({ top: { name: "Maple St Rental", address: "742 Maple St", beds: 3, baths: 2, sqft: 1450, lat: 33.6357, lng: -96.6089, listingStatus: "Active", description: "Fully renovated, new kitchen and new flooring throughout. Turnkey.", listingLink: "https://example.com/maple" }, price: 165000, rent: 1850, rehab: 25000, arv: 230000 }),
       mk({ top: { name: "Oak Ave Fixer", address: "318 Oak Ave", beds: 3, baths: 1, sqft: 1280, lat: 33.642, lng: -96.62, listingStatus: "Active", description: "Investor special, dated, needs work. Bring your contractor — value-add." }, price: 119000, rent: 1500, rehab: 45000 }),
-      mk({ type: "multifamily", top: { name: "Cedar Duplex", address: "55 Cedar St", units: 2, beds: 4, baths: 2, sqft: 2200, lat: 33.638, lng: -96.611, listingStatus: "Active", description: "Side-by-side duplex, both units updated, long-term tenants." }, price: 240000, rent: 2900, rehab: 20000 }),
-      // Recent sold comps — same list, auto-ranked as comps for the deals above.
+      mk({ type: "multifamily", top: { name: "Cedar Duplex", address: "55 Cedar St", units: 2, beds: 4, baths: 2, sqft: 2200, lat: 33.638, lng: -96.611, listingStatus: "Active", description: "Side-by-side duplex, both units updated, long-term tenants." }, price: 240000, rehab: 20000 }),
+    ];
+    // Showcase the per-unit rent roll on the multifamily deal.
+    subjects[2].brrrr.rentMode = "auto"; subjects[2].brrrr.rentPerUnit = 1450;
+    const comps = [
       mk({ top: { name: "905 Pine Rd", address: "905 Pine Rd", beds: 3, baths: 2, sqft: 1500, lat: 33.63, lng: -96.6, description: "Remodeled, updated throughout." }, soldPrice: 228000, soldDate: "2026-03-12" }),
       mk({ top: { name: "212 Elm St", address: "212 Elm St", beds: 3, baths: 2, sqft: 1380, lat: 33.628, lng: -96.615, description: "Original condition, dated." }, soldPrice: 199000, soldDate: "2026-02-02" }),
       mk({ top: { name: "640 Birch Ln", address: "640 Birch Ln", beds: 3, baths: 2, sqft: 1420, lat: 33.634, lng: -96.605, description: "Move-in ready, new paint and flooring." }, soldPrice: 215000, soldDate: "2026-04-01" }),
       mk({ type: "multifamily", top: { name: "88 Cedar Ct", address: "88 Cedar Ct", units: 2, beds: 4, baths: 2, sqft: 2150, lat: 33.639, lng: -96.612, description: "Updated duplex, both units renovated." }, soldPrice: 305000, soldDate: "2026-03-20" }),
     ];
+    const rows = subjects.concat(comps);
     for (let i = rows.length - 1; i >= 0; i--) STATE.properties.unshift(rows[i]);
+    // Pre-select suggested comps for the active deals so ARV ranges show immediately.
+    for (const s of subjects) s.compIds = suggestThree(s).map((x) => x.c.id);
   }
 
   /* ===================================================================== *

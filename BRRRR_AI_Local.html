@@ -7,36 +7,36 @@
 <style>
 /* ====================================================================== */
 /*  BRRRR AI — Local. Self-contained styles (no external fonts/CDN).      */
-/*  Premium dark theme: Bloomberg-clarity data + Apple-calm spacing.      */
+/*  Light premium theme: clean, bright, modern financial software.        */
 /* ====================================================================== */
 
 :root {
-  --bg: #0a0c11;
-  --bg-grad: radial-gradient(1200px 600px at 78% -8%, #15203a 0%, rgba(21,32,58,0) 60%), var(--bg);
-  --bg-soft: #11141b;
-  --panel: #161a23;
-  --panel-2: #1d2330;
-  --panel-hi: #222a39;
-  --border: #262e3c;
-  --border-soft: #1e2531;
-  --border-strong: #33404f;
-  --text: #eef2f8;
-  --text-dim: #9fb0c3;
-  --text-faint: #6a778a;
-  --accent: #5b8cff;
-  --accent-2: #6f9bff;
-  --accent-soft: #16233f;
-  --good: #34d399;
-  --good-bg: #0d2a22;
-  --good-bd: #1c5040;
-  --warn: #f5c451;
-  --warn-bg: #2a2310;
-  --warn-bd: #5a4a16;
-  --bad: #f8736f;
-  --bad-bg: #2a1417;
-  --bad-bd: #5a2a2a;
-  --shadow: 0 10px 30px rgba(0,0,0,.42);
-  --shadow-sm: 0 2px 10px rgba(0,0,0,.28);
+  --bg: #eef1f6;            /* off-white page background */
+  --bg-grad: radial-gradient(1100px 520px at 82% -10%, #e7eefc 0%, rgba(231,238,252,0) 62%), var(--bg);
+  --bg-soft: #f5f7fb;       /* inset surfaces */
+  --panel: #ffffff;         /* cards */
+  --panel-2: #f3f6fb;
+  --panel-hi: #eaeff7;
+  --border: #e2e7f0;
+  --border-soft: #edf1f7;
+  --border-strong: #d3dae6;
+  --text: #131a26;          /* dark readable text */
+  --text-dim: #57617a;
+  --text-faint: #8a93a6;
+  --accent: #2563eb;        /* professional blue */
+  --accent-2: #3b78f0;
+  --accent-soft: #e7eefc;
+  --good: #0f9d6a;          /* green */
+  --good-bg: #e6f6ee;
+  --good-bd: #b7e6cd;
+  --warn: #b9770a;          /* amber */
+  --warn-bg: #fcf3e1;
+  --warn-bd: #f0d9a8;
+  --bad: #d92d2d;           /* red */
+  --bad-bg: #fdeaea;
+  --bad-bd: #f3c2c2;
+  --shadow: 0 12px 30px rgba(20,33,61,.12);
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.05), 0 3px 10px rgba(16,24,40,.05);
   --radius: 14px;
   --radius-sm: 9px;
   --radius-xs: 6px;
@@ -53,16 +53,16 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  letter-spacing: .005em;
+  letter-spacing: .003em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 ::-webkit-scrollbar { width: 11px; height: 11px; }
-::-webkit-scrollbar-thumb { background: #2a3342; border-radius: 8px; border: 3px solid var(--bg); }
-::-webkit-scrollbar-thumb:hover { background: #38445a; }
+::-webkit-scrollbar-thumb { background: #cdd5e2; border-radius: 8px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #b6c0d2; }
 
-a { color: var(--accent-2); text-decoration: none; }
+a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 button { font-family: inherit; font-size: 13px; cursor: pointer; }
@@ -71,19 +71,18 @@ input, select, textarea {
   font-family: inherit;
   font-size: 13px;
   color: var(--text);
-  background: #0d1017;
-  border: 1px solid var(--border);
+  background: #fff;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   width: 100%;
-  transition: border-color .14s ease, box-shadow .14s ease, background .14s ease;
+  transition: border-color .14s ease, box-shadow .14s ease;
 }
-input:hover, select:hover, textarea:hover { border-color: var(--border-strong); }
+input:hover, select:hover, textarea:hover { border-color: #c0cad9; }
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(91,140,255,.16);
-  background: #0e131c;
+  box-shadow: 0 0 0 3px rgba(37,99,235,.14);
 }
 textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
 label { display: block; font-size: 10.5px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
@@ -94,24 +93,21 @@ label { display: block; font-size: 10.5px; color: var(--text-dim); margin-bottom
 .sidebar {
   width: 224px;
   flex: 0 0 224px;
-  background: linear-gradient(180deg, #0e1118 0%, #0b0e14 100%);
-  border-right: 1px solid var(--border-soft);
+  background: #fff;
+  border-right: 1px solid var(--border);
   padding: 18px 14px;
   position: sticky;
   top: 0;
   height: 100vh;
   overflow-y: auto;
 }
-.brand {
-  font-weight: 800; font-size: 16px; letter-spacing: .04em;
-  padding: 6px 10px 18px; position: relative;
-}
+.brand { font-weight: 800; font-size: 16px; letter-spacing: .02em; padding: 6px 10px 18px; position: relative; color: var(--text); }
 .brand::before {
   content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%;
   background: var(--accent); margin-right: 9px; vertical-align: middle;
-  box-shadow: 0 0 12px 1px rgba(91,140,255,.7);
+  box-shadow: 0 0 0 4px rgba(37,99,235,.14);
 }
-.brand small { display: block; font-weight: 500; font-size: 10.5px; color: var(--text-faint); letter-spacing: .12em; text-transform: uppercase; margin-top: 6px; padding-left: 18px; }
+.brand small { display: block; font-weight: 600; font-size: 10.5px; color: var(--text-faint); letter-spacing: .12em; text-transform: uppercase; margin-top: 6px; padding-left: 18px; }
 .nav-item {
   display: flex; align-items: center; gap: 11px;
   padding: 10px 11px; border-radius: var(--radius-sm); margin-bottom: 2px;
@@ -119,13 +115,13 @@ label { display: block; font-size: 10.5px; color: var(--text-dim); margin-bottom
   border: none; background: transparent; width: 100%; text-align: left;
   position: relative; transition: background .14s ease, color .14s ease;
 }
-.nav-item:hover { background: var(--panel); color: var(--text); }
-.nav-item.active { background: linear-gradient(90deg, var(--accent-soft), rgba(22,35,63,.4)); color: #fff; }
+.nav-item:hover { background: var(--bg-soft); color: var(--text); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .nav-item.active::before {
   content: ""; position: absolute; left: -14px; top: 8px; bottom: 8px; width: 3px;
-  background: var(--accent); border-radius: 0 3px 3px 0; box-shadow: 0 0 10px rgba(91,140,255,.6);
+  background: var(--accent); border-radius: 0 3px 3px 0;
 }
-.nav-ico { width: 17px; text-align: center; opacity: .85; font-size: 14px; }
+.nav-ico { width: 17px; text-align: center; opacity: .9; font-size: 14px; }
 
 .main { flex: 1 1 auto; min-width: 0; padding: 26px 30px 72px; max-width: 1240px; background: var(--bg-grad); }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
@@ -136,32 +132,33 @@ label { display: block; font-size: 10.5px; color: var(--text-dim); margin-bottom
 /* ----------------------------- buttons ------------------------------- */
 .btn {
   border: 1px solid var(--border-strong);
-  background: var(--panel-2);
+  background: #fff;
   color: var(--text);
   border-radius: var(--radius-sm);
   padding: 9px 14px;
   font-weight: 600;
   display: inline-flex; align-items: center; gap: 6px;
-  transition: background .14s ease, border-color .14s ease, transform .05s ease;
+  box-shadow: var(--shadow-sm);
+  transition: background .14s ease, border-color .14s ease, transform .05s ease, box-shadow .14s ease;
 }
-.btn:hover { background: var(--panel-hi); border-color: #41506480; }
+.btn:hover { background: var(--bg-soft); border-color: #c4cedd; }
 .btn:active { transform: translateY(1px); }
 .btn.primary {
   background: linear-gradient(180deg, var(--accent-2), var(--accent));
   border-color: transparent; color: #fff;
-  box-shadow: 0 4px 14px rgba(91,140,255,.32);
+  box-shadow: 0 4px 12px rgba(37,99,235,.28);
 }
-.btn.primary:hover { filter: brightness(1.08); }
-.btn.ghost { background: transparent; border-color: var(--border); }
-.btn.ghost:hover { background: var(--panel); }
-.btn.danger { color: var(--bad); border-color: #44282a; background: transparent; }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.ghost { background: transparent; border-color: transparent; box-shadow: none; }
+.btn.ghost:hover { background: var(--bg-soft); }
+.btn.danger { color: var(--bad); border-color: var(--bad-bd); background: #fff; }
 .btn.danger:hover { background: var(--bad-bg); }
 .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: var(--radius-xs); }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 
 /* ----------------------------- cards --------------------------------- */
 .card {
-  background: linear-gradient(180deg, var(--panel) 0%, #14171f 100%);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 18px 20px;
@@ -181,22 +178,22 @@ label { display: block; font-size: 10.5px; color: var(--text-dim); margin-bottom
 
 /* ----------------------------- stats / KPIs -------------------------- */
 .stat {
-  background: linear-gradient(180deg, var(--bg-soft), #0d1016);
-  border: 1px solid var(--border-soft);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 14px 16px;
 }
 .stat .k { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
-.stat .v { font-size: 25px; font-weight: 760; margin-top: 5px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.stat .v { font-size: 25px; font-weight: 760; margin-top: 5px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--text); }
 .stat .sub { font-size: 11.5px; color: var(--text-faint); margin-top: 3px; }
 .v.good { color: var(--good); } .v.bad { color: var(--bad); } .v.warn { color: var(--warn); }
-.kpi-grid .stat { position: relative; overflow: hidden; }
+.kpi-grid .stat { position: relative; overflow: hidden; background: #fff; }
 .kpi-grid .stat::after {
-  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
-  background: linear-gradient(90deg, var(--accent), transparent 70%); opacity: .7;
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  background: linear-gradient(90deg, var(--accent), rgba(37,99,235,0) 75%);
 }
 
-/* text color utilities (used on inline spans / paragraphs) */
+/* text color utilities */
 .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
 
 /* ----------------------------- badges -------------------------------- */
@@ -211,48 +208,51 @@ label { display: block; font-size: 10.5px; color: var(--text-dim); margin-bottom
 .badge.bad  { background: var(--bad-bg);  color: var(--bad);  border-color: var(--bad-bd); }
 .badge.grade { font-size: 12px; min-width: 32px; justify-content: center; padding: 3px 9px; }
 
-.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; background: #131722; color: var(--text-dim); border: 1px solid var(--border-soft); }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; background: var(--bg-soft); color: var(--text-dim); border: 1px solid var(--border); }
 
 /* ----------------------------- filter chips -------------------------- */
 .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
 .chip {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 7px 13px; border-radius: 999px;
-  background: var(--panel); border: 1px solid var(--border);
+  background: #fff; border: 1px solid var(--border-strong);
   color: var(--text-dim); font-weight: 600; font-size: 12.5px;
+  box-shadow: var(--shadow-sm);
   transition: all .14s ease;
 }
-.chip:hover { border-color: var(--border-strong); color: var(--text); }
-.chip.active { background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: transparent; color: #fff; box-shadow: 0 3px 12px rgba(91,140,255,.3); }
-.chip-n { font-size: 11px; background: rgba(255,255,255,.14); border-radius: 999px; padding: 0 7px; line-height: 17px; min-width: 18px; text-align: center; }
-.chip:not(.active) .chip-n { background: #0d1017; color: var(--text-faint); }
+.chip:hover { border-color: #c4cedd; color: var(--text); }
+.chip.active { background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: transparent; color: #fff; box-shadow: 0 3px 10px rgba(37,99,235,.28); }
+.chip-n { font-size: 11px; background: rgba(0,0,0,.06); border-radius: 999px; padding: 0 7px; line-height: 17px; min-width: 18px; text-align: center; }
+.chip.active .chip-n { background: rgba(255,255,255,.22); }
 
 /* ----------------------------- tables -------------------------------- */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border-soft); }
 th { color: var(--text-faint); font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
 tbody tr:last-child td { border-bottom: none; }
-tr:hover td { background: rgba(91,140,255,.05); }
+tr:hover td { background: var(--bg-soft); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ----------------------------- property list ------------------------- */
 .prop-row { cursor: pointer; }
-.prop-name { font-weight: 650; }
+.prop-name { font-weight: 650; color: var(--text); }
 .prop-sub { color: var(--text-faint); font-size: 12px; margin-top: 1px; }
 
 /* ----------------------------- workspace ----------------------------- */
 .ws-grid { display: grid; grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .ws-results { position: sticky; top: 18px; }
-.section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--accent-2); margin: 22px 0 9px; font-weight: 800; }
-.mode-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: #0d1017; }
+.ws-switch { display: flex; align-items: center; gap: 9px; }
+.ws-switch select { width: auto; min-width: 220px; max-width: 360px; font-weight: 600; }
+.section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--accent); margin: 22px 0 9px; font-weight: 800; }
+.mode-toggle { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; background: #fff; }
 .mode-toggle button { background: transparent; border: none; color: var(--text-dim); padding: 8px 13px; font-weight: 600; transition: background .14s ease, color .14s ease; }
 .mode-toggle button:hover { color: var(--text); }
 .mode-toggle button.active { background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #fff; }
 
-.kv { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
 .kv:last-child { border-bottom: none; }
 .kv .k { color: var(--text-dim); }
-.kv .v { font-weight: 650; font-variant-numeric: tabular-nums; }
+.kv .v { font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; }
 
 .finding { display: flex; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
 .finding:last-child { border: none; }
@@ -262,45 +262,61 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .finding .t { font-weight: 650; }
 .finding .d { color: var(--text-dim); font-size: 12px; }
 
-.stars { color: var(--warn); letter-spacing: 2px; font-size: 17px; }
+.stars { color: #e6a911; letter-spacing: 2px; font-size: 17px; }
+
+/* ----------------------------- renovation planner -------------------- */
+.reno-list { display: flex; flex-direction: column; gap: 6px; }
+.reno-row { display: grid; grid-template-columns: 92px 96px 1fr; gap: 8px; align-items: center; }
+.reno-row input { padding: 6px 8px; }
+.reno-cat { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.reno-head { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); font-weight: 700; }
+.reno-head .reno-cat { color: var(--text-faint); font-weight: 700; }
 
 /* ----------------------------- comps --------------------------------- */
-.comp-card { background: linear-gradient(180deg, var(--bg-soft), #0d1016); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 13px; display: flex; flex-direction: column; }
-.comp-card.lower { border-top: 2px solid var(--accent); }
-.comp-card.similar { border-top: 2px solid var(--good); }
-.comp-card.higher { border-top: 2px solid var(--warn); }
-.comp-card.comp-empty { border-style: dashed; color: var(--text-faint); }
+.comp-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 13px; display: flex; flex-direction: column; }
+.comp-card.lower { border-top: 3px solid var(--accent); }
+.comp-card.similar { border-top: 3px solid var(--good); }
+.comp-card.higher { border-top: 3px solid var(--warn); }
 .comp-why { font-size: 11px; color: var(--text-faint); margin-top: 7px; line-height: 1.45; }
 .comp-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 800; color: var(--text-faint); }
+.comp-facts { display: flex; flex-wrap: wrap; gap: 5px; }
 .comp-swap { display: flex; align-items: center; gap: 8px; }
 .comp-swap > span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); font-weight: 700; white-space: nowrap; }
 .comp-swap select { padding: 5px 7px; font-size: 12px; }
 .comp-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 10px; }
 
+/* comp picker */
+.comp-filters { display: grid; grid-template-columns: 1fr 130px 160px; gap: 8px; }
+.picker-list { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; }
+.picker-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; }
+.picker-row:hover { border-color: #c4cedd; }
+.picker-main { flex: 1 1 auto; min-width: 0; }
+.picker-main .prop-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ----------------------------- dashboard ----------------------------- */
 .dash-split { align-items: start; }
 .market-list { display: flex; flex-direction: column; gap: 4px; }
 .market-row { width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 11px 12px; transition: background .14s ease, border-color .14s ease; }
-.market-row:hover { background: var(--bg-soft); border-color: var(--border-soft); }
+.market-row:hover { background: var(--bg-soft); border-color: var(--border); }
 .market-row-top { display: flex; justify-content: space-between; align-items: baseline; }
 .market-name { font-weight: 700; font-size: 13.5px; color: var(--text); }
 .market-count { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-dim); }
-.market-bar { display: flex; gap: 2px; height: 7px; margin: 8px 0 6px; border-radius: 999px; overflow: hidden; background: #0d1017; }
+.market-bar { display: flex; gap: 2px; height: 7px; margin: 8px 0 6px; border-radius: 999px; overflow: hidden; background: #e7ecf3; }
 .market-bar .seg { display: block; height: 100%; border-radius: 999px; }
 .market-bar .seg.good { background: var(--good); }
 .market-bar .seg.warn { background: var(--warn); }
 .market-bar .seg.bad { background: var(--bad); }
-.market-bar .muted-seg { background: #232b38; }
+.market-bar .muted-seg { background: #d7deea; }
 .market-row-sub { font-size: 11.5px; color: var(--text-faint); }
 
 /* ----------------------------- map ----------------------------------- */
-.map-wrap { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
+.map-wrap { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .map-svg { display: block; width: 100%; height: auto; background:
   linear-gradient(var(--border-soft) 1px, transparent 1px) 0 0 / 100% 40px,
   linear-gradient(90deg, var(--border-soft) 1px, transparent 1px) 0 0 / 40px 100%,
-  var(--bg); }
+  #fbfcfe; }
 .map-pin { cursor: pointer; }
-.map-tooltip { position: fixed; z-index: 50; background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 11px 13px; box-shadow: var(--shadow); max-width: 270px; pointer-events: none; font-size: 12px; }
+.map-tooltip { position: fixed; z-index: 50; background: #fff; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 11px 13px; box-shadow: var(--shadow); max-width: 270px; pointer-events: none; font-size: 12px; color: var(--text); }
 .map-tooltip .t { font-weight: 700; margin-bottom: 3px; }
 .map-legend { display: flex; gap: 16px; flex-wrap: wrap; padding: 11px 16px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 12px; }
 .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
@@ -309,12 +325,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .kanban { display: grid; grid-template-columns: repeat(6, minmax(174px, 1fr)); gap: 13px; overflow-x: auto; }
 .kanban-col { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 11px; min-height: 120px; }
 .kanban-col h4 { margin: 0 0 9px; font-size: 12px; color: var(--text-dim); display: flex; justify-content: space-between; }
-.kanban-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 8px; cursor: pointer; transition: border-color .14s ease; }
+.kanban-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 8px; cursor: pointer; transition: border-color .14s ease; box-shadow: var(--shadow-sm); }
 .kanban-card:hover { border-color: var(--accent); }
 
 /* ----------------------------- misc ---------------------------------- */
-.empty { text-align: center; color: var(--text-faint); padding: 56px 24px; border: 1px dashed var(--border); border-radius: var(--radius); background: linear-gradient(180deg, rgba(22,26,35,.5), rgba(13,16,22,.3)); }
-.empty .empty-ico { font-size: 40px; margin-bottom: 12px; filter: grayscale(.1); }
+.empty { text-align: center; color: var(--text-faint); padding: 56px 24px; border: 1px dashed var(--border-strong); border-radius: var(--radius); background: #fff; }
+.empty .empty-ico { font-size: 40px; margin-bottom: 12px; }
 .empty h3 { margin: 0 0 8px; font-size: 18px; color: var(--text); font-weight: 700; }
 .empty p { margin: 0 auto; max-width: 460px; line-height: 1.55; }
 .muted { color: var(--text-dim); }
@@ -332,19 +348,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .toast {
   position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(8px);
-  background: var(--panel-hi); border: 1px solid var(--border-strong); color: var(--text);
+  background: #131a26; border: 1px solid #131a26; color: #fff;
   padding: 11px 20px; border-radius: 999px; box-shadow: var(--shadow);
   z-index: 100; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .2s, transform .2s;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-.modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 80; padding: 20px; backdrop-filter: blur(2px); }
-.modal { background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 22px; width: 100%; max-width: 560px; box-shadow: var(--shadow); max-height: 86vh; overflow-y: auto; }
+.modal-back { position: fixed; inset: 0; background: rgba(19,26,38,.4); display: flex; align-items: center; justify-content: center; z-index: 80; padding: 20px; backdrop-filter: blur(2px); }
+.modal { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; width: 100%; max-width: 560px; box-shadow: var(--shadow); max-height: 86vh; overflow-y: auto; }
 .modal h3 { margin-top: 0; }
 
-.dropzone { border: 1.5px dashed var(--border-strong); border-radius: var(--radius); padding: 28px 18px; text-align: center; color: var(--text-dim); background: linear-gradient(180deg, rgba(22,26,35,.4), rgba(13,16,22,.2)); transition: border-color .14s ease, background .14s ease; }
-.dropzone.drag { border-color: var(--accent); color: var(--text); background: rgba(91,140,255,.08); }
-.dropzone .dz-ico { font-size: 30px; color: var(--accent-2); margin-bottom: 8px; }
+.dropzone { border: 1.5px dashed var(--border-strong); border-radius: var(--radius); padding: 28px 18px; text-align: center; color: var(--text-dim); background: var(--bg-soft); transition: border-color .14s ease, background .14s ease; }
+.dropzone.drag { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
+.dropzone .dz-ico { font-size: 30px; color: var(--accent); margin-bottom: 8px; }
 
 .checkbox-row { display: flex; align-items: center; gap: 9px; }
 .checkbox-row input { width: auto; }
@@ -356,11 +372,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .main { padding: 22px 18px 60px; }
   .sidebar { width: 66px; flex-basis: 66px; }
   .nav-label, .brand small { display: none; }
-  .nav-item.active::before { left: -14px; }
 }
-@media (max-width: 620px) {
+@media (max-width: 640px) {
   .grid.cols-3, .grid.cols-4, .grid.cols-2, .grid.cols-2.dash-split { grid-template-columns: 1fr; }
   .field-row, .field-row.three { grid-template-columns: 1fr; }
+  .comp-filters { grid-template-columns: 1fr; }
 }
 
 </style>
@@ -734,6 +750,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       newInterestRate: a.refiRate,
       newLoanTerm: a.refiTermYears,
       monthlyRent: null,
+      rentPerUnit: null,
+      otherIncome: null,
+      rentMode: "manual", // "manual" total | "auto" from units × rent/unit + other income
       taxes: p ? Math.round((a.taxRatePct / 100) * p) : null,
       insurance: a.insuranceAnnual,
       management: a.managementPct,
@@ -750,6 +769,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  // Renovation planner line items (the rehab estimate is built from these).
+  const RENO_CATEGORIES = ["Exterior", "Roof", "HVAC", "Plumbing", "Electrical", "Kitchen", "Bathrooms", "Flooring", "Paint", "Windows", "Landscaping", "Other"];
+  function defaultRenoItems() { return RENO_CATEGORIES.map((category) => ({ category, cost: null, notes: "" })); }
+  function renoTotal(p) { return (p.renoItems || []).reduce((sum, it) => sum + (num(it.cost) || 0), 0); }
+
   function emptyProperty() {
     const now = Date.now();
     return {
@@ -764,12 +788,30 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       listingStatus: "", soldPrice: null, soldDate: "",
       queueStatus: "new", inPipeline: false, pipelineStage: "watching",
       arvMode: "manual",
+      rehabMode: "planner", // "planner" total from line items | "manual" rehab override
+      renoItems: defaultRenoItems(),
+      compIds: [],          // manually selected comps — the ONLY comps used for ARV
       brrrr: defaultBrrrr(0),
-      excludedCompIds: [], compSelections: { lower: null, similar: null, higher: null }, extraFields: {},
+      extraFields: {},
     };
   }
 
   /* ------------------------------ resolve inputs ------------------------ */
+  // Total monthly rent from the unit-level rent roll (units × rent/unit + other income).
+  function totalRentRoll(p) {
+    const b = p.brrrr;
+    const units = Math.max(1, num(p.units) || 1);
+    return units * (num(b.rentPerUnit) || 0) + (num(b.otherIncome) || 0);
+  }
+  // Effective total monthly rent fed to the engine (auto rent-roll or manual total).
+  function effectiveRent(p) {
+    return p.brrrr.rentMode === "auto" ? totalRentRoll(p) : (num(p.brrrr.monthlyRent) || 0);
+  }
+  // Effective rehab cost — the renovation planner total unless a manual override is set.
+  function effectiveRehab(p) {
+    return p.rehabMode === "manual" ? (num(p.brrrr.rehabCosts) || 0) : renoTotal(p);
+  }
+
   // Build the engine Inputs from a property, substituting the chosen ARV source.
   function resolveInputs(p) {
     const b = p.brrrr;
@@ -782,9 +824,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     return {
       purchasePrice: n(b.purchasePrice), purchaseType: b.purchaseType === "cash" ? "cash" : "financed",
       downPayment: n(b.downPayment), purchaseInterestRate: n(b.purchaseInterestRate), purchaseLoanTerm: n(b.purchaseLoanTerm),
-      closingCosts: n(b.closingCosts), holdingCosts: n(b.holdingCosts), rehabCosts: n(b.rehabCosts),
+      closingCosts: n(b.closingCosts), holdingCosts: n(b.holdingCosts), rehabCosts: effectiveRehab(p),
       arv, refinanceLTV: n(b.refinanceLTV), newInterestRate: n(b.newInterestRate), newLoanTerm: n(b.newLoanTerm),
-      monthlyRent: n(b.monthlyRent), taxes: n(b.taxes), insurance: n(b.insurance),
+      monthlyRent: effectiveRent(p), taxes: n(b.taxes), insurance: n(b.insurance),
       management: n(b.management), vacancy: n(b.vacancy), maintenance: n(b.maintenance),
       hoa: n(b.hoa), capexReserve: n(b.capexReserve), utilities: n(b.utilities),
     };
@@ -794,7 +836,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     const inputs = resolveInputs(p);
     const r = analyze(inputs);
     const s = summarize(inputs, r);
-    const hasDeal = (num(p.brrrr.purchasePrice) || 0) > 0 || inputs.arv > 0 || (num(p.brrrr.monthlyRent) || 0) > 0;
+    const hasDeal = (num(p.brrrr.purchasePrice) || 0) > 0 || inputs.arv > 0 || effectiveRent(p) > 0;
     return {
       inputs, r, s, hasDeal,
       grade: investmentGrade(s.score, s.recommendation),
@@ -953,9 +995,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
   // Every other property scored + ranked as a candidate comp for `subject`.
   function compCandidates(subject) {
-    const excluded = new Set(subject.excludedCompIds || []);
     return STATE.properties
-      .filter((c) => c.id !== subject.id && !excluded.has(c.id))
+      .filter((c) => c.id !== subject.id)
       .map((c) => scoreCompProp(subject, c))
       .filter(Boolean)
       .sort((a, b) => b.score - a.score);
@@ -974,37 +1015,32 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     return { lower, similar, higher };
   }
 
-  // Resolve the three comps for a subject, honoring manual picks (compSelections).
-  function selectComps(subject) {
-    const pool = compCandidates(subject);
-    const auto = autoBrackets(pool);
-    const sel = subject.compSelections || {};
-    const used = new Set();
-    const resolve = (bracket) => {
-      let chosen = null;
-      if (sel[bracket]) {
-        chosen = pool.find((x) => x.c.id === sel[bracket]) || null;
-        if (chosen) chosen.pinned = true;
-      }
-      if (!chosen) chosen = auto[bracket];
-      if (chosen && used.has(chosen.c.id)) chosen = sel[bracket] ? chosen : null; // keep manual dupes, drop auto dupes
-      if (chosen) { chosen.bracket = bracket; used.add(chosen.c.id); }
-      return chosen || null;
-    };
-    const similar = resolve("similar");
-    const lower = resolve("lower");
-    const higher = resolve("higher");
-    return { lower, similar, higher, pool };
+  // Optional suggestion: up to three comps spanning lower / similar / higher value.
+  function suggestThree(subject) {
+    const auto = autoBrackets(compCandidates(subject));
+    return [auto.lower, auto.similar, auto.higher].filter(Boolean);
   }
 
-  // ARV range derived from the three selected comps.
+  // The comps the user has manually selected — the ONLY comps used for ARV.
+  function selectedCompList(subject) {
+    const out = [];
+    for (const id of subject.compIds || []) {
+      const c = getProperty(id);
+      if (!c) continue;
+      const scored = scoreCompProp(subject, c);
+      if (scored) out.push(scored);
+    }
+    // Order by implied value so the lowest reads as the conservative end.
+    return out.sort((a, b) => a.impliedARV - b.impliedARV);
+  }
+
+  // ARV range derived ONLY from the manually selected comps.
   function computeArvRange(p) {
     const sqft = num(p.sqft);
-    const sel = selectComps(p);
-    const three = [sel.lower, sel.similar, sel.higher].filter(Boolean);
-    if (!sqft || three.length === 0) return { conservative: 0, expected: 0, aggressive: 0, confidence: "Low", ppsfLow: 0, ppsfHigh: 0, count: 0 };
+    const sel = selectedCompList(p);
+    if (!sqft || sel.length === 0) return { conservative: 0, expected: 0, aggressive: 0, confidence: "Low", ppsfLow: 0, ppsfHigh: 0, count: 0 };
 
-    const implied = three.map((x) => x.ppsf * renoFactor(x.reno));
+    const implied = sel.map((x) => x.ppsf * renoFactor(x.reno));
     const arvs = implied.map((ppsf) => ppsf * sqft);
     const conservative = Math.min.apply(null, arvs);
     const aggressive = Math.max.apply(null, arvs);
@@ -1012,11 +1048,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     const mean = expected;
     const cv = mean > 0 ? Math.sqrt(arvs.reduce((a, b) => a + (b - mean) ** 2, 0) / arvs.length) / mean : 1;
     let confidence = "Medium";
-    if (implied.length >= 3 && cv <= 0.1) confidence = "High";
-    else if (implied.length < 2 || cv > 0.2) confidence = "Low";
+    if (sel.length >= 3 && cv <= 0.1) confidence = "High";
+    else if (sel.length < 2 || cv > 0.2) confidence = "Low";
     return {
       conservative, expected, aggressive, confidence,
-      ppsfLow: Math.min.apply(null, implied), ppsfHigh: Math.max.apply(null, implied), count: implied.length,
+      ppsfLow: Math.min.apply(null, implied), ppsfHigh: Math.max.apply(null, implied), count: sel.length,
     };
   }
 
@@ -1070,7 +1106,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     ["sqft", ["square feet", "square footage", "sq ft", "sqft", "living area", "gla", "size"]],
     ["taxes", ["property taxes", "annual tax", "property tax", "taxes", "tax"]],
     ["insurance", ["annual insurance", "hazard insurance", "insurance"]],
-    ["rent", ["monthly rent", "market rent", "estimated rent", "rent estimate", "rent", "rental"]],
+    ["rentPerUnit", ["rent per unit", "per unit rent", "unit rent", "rent/unit", "avg rent", "average rent"]],
+    ["rent", ["monthly rent", "market rent", "estimated rent", "rent estimate", "total rent", "rent", "rental", "gross rent"]],
     ["notes", ["notes", "note", "comments", "comment", "remarks"]],
     ["description", ["public remarks", "description", "details", "marketing", "desc"]],
     ["status", ["listing status", "sale status", "status"]],
@@ -1162,12 +1199,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       const taxes = num(get("taxes"));
       const insurance = num(get("insurance"));
       const rent = num(get("rent"));
+      const rentPerUnit = num(get("rentPerUnit"));
       const rehab = num(get("rehabEstimate"));
       const arv = num(get("arv"));
       if (taxes != null) b.taxes = taxes;
       if (insurance != null) b.insurance = insurance;
       b.monthlyRent = rent != null ? rent : (profile.defaultRent || null);
-      b.rehabCosts = rehab != null ? rehab : (profile.defaultRehab || null);
+      // A per-unit rent figure switches the deal to the auto rent roll.
+      if (rentPerUnit != null) { b.rentPerUnit = rentPerUnit; b.rentMode = "auto"; }
+      // Rehab estimate flows into the renovation planner (so it feeds rehab) and the manual field.
+      const rehabVal = rehab != null ? rehab : (profile.defaultRehab || null);
+      b.rehabCosts = rehabVal;
+      if (rehabVal) { const other = p.renoItems.find((it) => it.category === "Other"); if (other) { other.cost = rehabVal; other.notes = "Imported estimate"; } }
       if (arv != null) b.arv = arv;
       p.brrrr = b;
       out.push(p);
@@ -1244,18 +1287,33 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     p.inPipeline = !!x.inPipeline;
     p.pipelineStage = PIPELINE_STAGES.some((s) => s.value === x.pipelineStage) ? x.pipelineStage : "watching";
     p.arvMode = ["manual", "conservative", "expected", "aggressive"].indexOf(x.arvMode) !== -1 ? x.arvMode : "manual";
+    p.rehabMode = x.rehabMode === "manual" ? "manual" : "planner";
+    p.renoItems = sanitizeRenoItems(x.renoItems);
     p.brrrr = Object.assign(defaultBrrrr(0), x.brrrr && typeof x.brrrr === "object" ? x.brrrr : {});
     if (p.brrrr.purchaseType !== "cash") p.brrrr.purchaseType = "financed";
-    p.excludedCompIds = Array.isArray(x.excludedCompIds) ? x.excludedCompIds.filter((id) => typeof id === "string") : [];
-    p.compSelections = sanitizeSelections(x.compSelections);
+    if (p.brrrr.rentMode !== "auto") p.brrrr.rentMode = "manual";
+    // Selected comps (the only comps that feed ARV). Migrate a legacy auto-selection if present.
+    if (Array.isArray(x.compIds)) p.compIds = x.compIds.filter((id) => typeof id === "string");
+    else if (x.compSelections && typeof x.compSelections === "object") {
+      p.compIds = ["lower", "similar", "higher"].map((k) => x.compSelections[k]).filter((id) => typeof id === "string");
+    } else p.compIds = [];
     p.extraFields = x.extraFields && typeof x.extraFields === "object" ? x.extraFields : {};
     return p;
   }
 
-  function sanitizeSelections(x) {
-    const s = { lower: null, similar: null, higher: null };
-    if (x && typeof x === "object") for (const k of ["lower", "similar", "higher"]) if (typeof x[k] === "string") s[k] = x[k];
-    return s;
+  function sanitizeRenoItems(x) {
+    const base = defaultRenoItems();
+    if (Array.isArray(x)) {
+      for (const it of x) {
+        if (!it || typeof it !== "object") continue;
+        const cat = typeof it.category === "string" ? it.category : "Other";
+        const notes = typeof it.notes === "string" ? it.notes : "";
+        const row = base.find((b) => b.category === cat);
+        if (row) { row.cost = num(it.cost); row.notes = notes; }
+        else base.push({ category: cat, cost: num(it.cost), notes: notes });
+      }
+    }
+    return base;
   }
 
   // Migrate a legacy comps-DB record from an old backup into a master-list property.
@@ -1317,7 +1375,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     "units", "beds", "baths", "sqft", "lotSize", "yearBuilt", "lat", "lng", "soldPrice",
     "brrrr.purchasePrice", "brrrr.downPayment", "brrrr.purchaseInterestRate", "brrrr.purchaseLoanTerm",
     "brrrr.closingCosts", "brrrr.holdingCosts", "brrrr.rehabCosts", "brrrr.arv", "brrrr.refinanceLTV",
-    "brrrr.newInterestRate", "brrrr.newLoanTerm", "brrrr.monthlyRent", "brrrr.taxes", "brrrr.insurance",
+    "brrrr.newInterestRate", "brrrr.newLoanTerm", "brrrr.monthlyRent", "brrrr.rentPerUnit", "brrrr.otherIncome",
+    "brrrr.taxes", "brrrr.insurance",
     "brrrr.management", "brrrr.vacancy", "brrrr.maintenance", "brrrr.hoa", "brrrr.capexReserve", "brrrr.utilities",
   ]);
 
@@ -1351,8 +1410,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
   const ROUTES = {
     dashboard: { label: "Dashboard", ico: "▦", render: renderDashboard },
+    import: { label: "Import", ico: "⤓", render: renderImport },
     properties: { label: "Properties", ico: "▤", render: renderProperties },
-    analyze: { label: "Analyze", ico: "⤓", render: renderAnalyze },
+    analyze: { label: "Analyze", ico: "◧", render: renderAnalyzeEntry },
     compare: { label: "Compare", ico: "⇄", render: renderCompare },
     settings: { label: "Settings", ico: "⚙", render: renderSettings },
     // Kept reachable by direct hash link, hidden from the simplified sidebar:
@@ -1362,7 +1422,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   };
 
   // Only these appear in the sidebar, in this order.
-  const NAV_ORDER = ["dashboard", "properties", "analyze", "compare", "settings"];
+  const NAV_ORDER = ["dashboard", "import", "properties", "analyze", "compare", "settings"];
 
   function parseHash() {
     const h = (location.hash || "#/dashboard").replace(/^#\/?/, "");
@@ -1387,7 +1447,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   function renderShell(route) {
     const navItems = NAV_ORDER.map((key) => {
       const r = ROUTES[key];
-      const active = key === route || (route === "property" && key === "properties") ? " active" : "";
+      const active = key === route || (route === "property" && key === "analyze") ? " active" : "";
       return `<button class="nav-item${active}" data-nav="${key}"><span class="nav-ico">${r.ico}</span><span class="nav-label">${r.label}</span></button>`;
     }).join("");
     return `
@@ -1455,12 +1515,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <div class="page-head">
         <div><h1>Dashboard</h1><p>${props.length} propert${props.length === 1 ? "y" : "ies"} · ${withDeal.length} analyzed</p></div>
         <div class="page-actions">
-          <button class="btn" data-go="analyze">⤓ Import CSV</button>
+          <button class="btn" data-go="import">⤓ Import CSV</button>
           <button class="btn primary" data-add="1">+ Add property</button>
         </div>
       </div>
       ${props.length === 0
-        ? emptyState("🏠", "No properties yet", "Import one master CSV and every deal is scored instantly — comps are picked from the same list. Everything stays on this device.", `<button class="btn primary" data-go="analyze">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
+        ? emptyState("🏠", "No properties yet", "Import one master CSV and every deal is scored instantly — comps are picked from the same list. Everything stays on this device.", `<button class="btn primary" data-go="import">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
         : `
       <div class="grid cols-4 kpi-grid">
         ${stat("Properties", props.length, withDeal.length + " analyzed")}
@@ -1524,10 +1584,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   }
 
   /* ===================================================================== *
-   *  10. VIEW: ANALYZE  (one master CSV → score everything)                *
+   *  10. VIEW: IMPORT  (one master CSV → score everything)                 *
    * ===================================================================== */
 
-  const MASTER_COLS_HINT = "Recognized: address, city, state, zip, market, submarket, price, list price, sold price, beds, baths, sqft, units, property type, rent, taxes, insurance, rehab, ARV, latitude, longitude, listing link, photo link, status, sold date, notes, description.";
+  const MASTER_COLS_HINT = "Recognized: address, city, state, zip, market, submarket, price, list price, sold price, beds, baths, sqft, units, property type, rent, rent per unit, taxes, insurance, rehab estimate, ARV, listing link, photo link, notes, description, renovation notes, sold date, latitude, longitude.";
 
   // The 12 assumptions surfaced on the pre-import step (full set lives in Settings).
   const IMPORT_ASSUME_FIELDS = [
@@ -1541,11 +1601,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
   let pendingSubjects = null, pendingSubjectMatch = null, pendingSubjectText = null;
 
-  function renderAnalyze(view) {
-    const nProps = STATE.properties.length;
+  function renderImport(view) {
     view.innerHTML = `
       <div class="page-head">
-        <div><h1>Analyze</h1><p>Import one master CSV — every property is scored, and comps are drawn from the same list.</p></div>
+        <div><h1>Import</h1><p>Import one master CSV — or add a property by hand. Every deal is scored automatically.</p></div>
         <div class="page-actions"><button class="btn" data-add="1">+ Add manually</button></div>
       </div>
 
@@ -1562,13 +1621,33 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       </div>
 
       <div class="card">
-        <h3>How comps work now <span class="muted">— no separate comps file</span></h3>
-        <p class="hint" style="margin:0">Import one broad list. When you open a property, the app ranks the <em>other</em> properties as comps — same market, type, size and condition — and suggests a lower / similar / higher comp plus an ARV range. Add a <strong>sold price</strong> and <strong>sold date</strong> to any rows you want treated as solid sold comps.</p>
+        <h3>How comps work <span class="muted">— one list, comps you choose</span></h3>
+        <p class="hint" style="margin:0">Import one broad list of properties. On a property's <strong>Analyze</strong> page you pick which of your other properties to use as comps (with optional lower / similar / higher suggestions) — only the comps you select drive the ARV range. Add a <strong>sold price</strong> and <strong>sold date</strong> to rows you want treated as solid sold comps.</p>
       </div>
     `;
     bindCommon(view);
     bindCsv(view);
     if (pendingSubjects) renderSubjectPreview(view, { properties: pendingSubjects, matched: pendingSubjectMatch });
+  }
+
+  /* ===================================================================== *
+   *  10c. VIEW: ANALYZE  (entry into per-property underwriting)            *
+   * ===================================================================== */
+
+  let activePropertyId = null;
+
+  function renderAnalyzeEntry(view) {
+    const props = STATE.properties;
+    if (!props.length) {
+      view.innerHTML = `<div class="page-head"><div><h1>Analyze</h1><p>Underwrite a single deal end to end.</p></div></div>` +
+        emptyState("📊", "Nothing to analyze yet", "Import a CSV or add a property, then come back here to underwrite it.", `<button class="btn primary" data-go="import">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`);
+      bindCommon(view);
+      return;
+    }
+    const valid = activePropertyId && getProperty(activePropertyId);
+    const id = valid ? activePropertyId : props.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0].id;
+    activePropertyId = id;
+    renderWorkspace(view, id, { fromAnalyze: true });
   }
 
   function bindCsv(view) {
@@ -1730,14 +1809,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <div class="page-head">
         <div><h1>Properties</h1><p>${props.length} saved · stored locally${propMarketFilter !== "All" ? ` · showing ${shown.length} in ${esc(propMarketFilter)}` : ""}</p></div>
         <div class="page-actions">
-          <button class="btn" data-go="analyze">⤓ Import CSV</button>
+          <button class="btn" data-go="import">⤓ Import CSV</button>
           <button class="btn primary" data-add="1">+ Add property</button>
         </div>
       </div>
       ${filterBar}
       <div class="card">
         ${props.length === 0
-          ? emptyState("📋", "No properties yet", "Import one master CSV of properties and the app scores every deal — then picks comps from the same list.", `<button class="btn primary" data-go="analyze">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
+          ? emptyState("📋", "No properties yet", "Import one master CSV of properties and the app scores every deal — then picks comps from the same list.", `<button class="btn primary" data-go="import">Import CSV</button><button class="btn" data-add="1">+ Add property</button>`)
           : (shown.length === 0 ? `<p class="faint">No properties in ${esc(propMarketFilter)}.</p>` : `
         <table>
           <thead><tr><th>Property</th><th>Market</th><th>Type</th><th>Reno</th><th>Grade</th><th class="num">Price</th><th class="num">Cash flow</th><th></th></tr></thead>
@@ -1794,16 +1873,25 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
    *  11. VIEW: PROPERTY WORKSPACE                                          *
    * ===================================================================== */
 
-  function renderWorkspace(view, id) {
+  function renderWorkspace(view, id, opts) {
+    opts = opts || {};
     const p = getProperty(id);
     if (!p) { view.innerHTML = `<div class="empty">Property not found. <a href="#/properties">Back to list</a></div>`; return; }
+    activePropertyId = p.id;
+
+    // From the Analyze tab: a property switcher; otherwise a back-to-list link.
+    const lead = opts.fromAnalyze
+      ? `<div class="ws-switch"><span class="comp-tag">Analyzing</span>
+          <select id="ws-switch">${STATE.properties.slice().sort((a, b) => b.updatedAt - a.updatedAt).map((q) => `<option value="${q.id}" ${q.id === p.id ? "selected" : ""}>${esc(propTitle(q))}${q.city ? " — " + esc(q.city) : ""}</option>`).join("")}</select>
+        </div>`
+      : `<button class="btn ghost sm" data-go="properties">← Properties</button>`;
 
     view.innerHTML = `
       <div class="page-head">
         <div>
-          <button class="btn ghost sm" data-go="properties">← Properties</button>
+          ${lead}
           <h1 style="margin-top:8px" id="ws-title">${esc(propTitle(p))}</h1>
-          <p id="ws-sub">${esc(cityStateZip(p) || "Add an address below")}</p>
+          <p id="ws-sub">${esc([propertyTypeLabel(p.propertyType), marketOf(p), cityStateZip(p)].filter(Boolean).join(" · ") || "Add an address below")}</p>
         </div>
         <div class="page-actions" id="ws-head-actions"></div>
       </div>
@@ -1815,6 +1903,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     bindCommon(view);
     bindWorkspace(view, p);
     renderHeadActions(p);
+    const sw = document.getElementById("ws-switch");
+    if (sw) sw.addEventListener("change", () => { activePropertyId = sw.value; render(); });
   }
 
   function renderHeadActions(p) {
@@ -1912,8 +2002,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           </div>
         </div>
         <div class="field-row">
+          ${field(p.propertyType === "multifamily" ? "Total purchase price ($)" : "Purchase price ($)", "brrrr.purchasePrice", b.purchasePrice)}
           ${field("Down payment ($)", "brrrr.downPayment", b.downPayment)}
-          ${field("Rehab costs ($)", "brrrr.rehabCosts", b.rehabCosts)}
         </div>
         <div class="field-row three">
           ${field("Purchase rate %", "brrrr.purchaseInterestRate", b.purchaseInterestRate, { step: "0.01" })}
@@ -1923,26 +2013,28 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         ${field("Holding costs ($)", "brrrr.holdingCosts", b.holdingCosts)}
       </div>
 
-      <div class="section-title">Phase 2 — Refinance & ARV</div>
+      <div class="section-title">Renovation planner</div>
+      <div class="card" id="reno-card">${renoSection(p)}</div>
+
+      <div class="section-title">Phase 2 — Refinance &amp; ARV</div>
       <div class="card" id="arv-card">${arvSection(p)}</div>
 
-      <div class="section-title">Phase 3 — Rental</div>
+      <div class="section-title">Phase 3 — Rental income</div>
       <div class="card">
+        <div id="rent-block">${rentSection(p)}</div>
+        <div class="divider"></div>
         <div class="field-row">
-          ${field("Monthly rent ($)", "brrrr.monthlyRent", b.monthlyRent)}
           ${field("Annual taxes ($)", "brrrr.taxes", b.taxes)}
-        </div>
-        <div class="field-row">
           ${field("Annual insurance ($)", "brrrr.insurance", b.insurance)}
-          ${field("HOA ($/mo)", "brrrr.hoa", b.hoa)}
         </div>
         <div class="field-row three">
           ${field("Mgmt %", "brrrr.management", b.management, { step: "0.1" })}
           ${field("Vacancy %", "brrrr.vacancy", b.vacancy, { step: "0.1" })}
           ${field("Maint %", "brrrr.maintenance", b.maintenance, { step: "0.1" })}
         </div>
-        <div class="field-row">
+        <div class="field-row three">
           ${field("CapEx %", "brrrr.capexReserve", b.capexReserve, { step: "0.1" })}
+          ${field("HOA ($/mo)", "brrrr.hoa", b.hoa)}
           ${field("Utilities ($/mo)", "brrrr.utilities", b.utilities)}
         </div>
       </div>
@@ -1953,8 +2045,68 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           ${field("Sold price ($)", "soldPrice", p.soldPrice)}
           ${field("Sold date", "soldDate", p.soldDate, { type: "date" })}
         </div>
-        <div class="hint">Properties with a sold price + sqft become available as comps for your other deals.</div>
+        <div class="hint">A sold price + sqft makes this property a strong comp for your other deals.</div>
       </div>
+    `;
+  }
+
+  // Phase 3 rent: per-unit rent roll (auto total) or a manual total.
+  function rentSection(p) {
+    const b = p.brrrr;
+    const auto = b.rentMode === "auto";
+    const units = Math.max(1, num(p.units) || 1);
+    const total = totalRentRoll(p);
+    return `
+      <div class="flex between wrap">
+        <label style="margin:0">Rent input</label>
+        <div class="mode-toggle" data-renttoggle>
+          <button data-val="auto" class="${auto ? "active" : ""}">Per-unit rent roll</button>
+          <button data-val="manual" class="${auto ? "" : "active"}">Manual total</button>
+        </div>
+      </div>
+      ${auto ? `
+        <div class="hint mt">Using <strong>${units}</strong> unit${units === 1 ? "" : "s"} from Property details above.</div>
+        <div class="field-row mt">
+          ${field("Rent / unit ($/mo)", "brrrr.rentPerUnit", b.rentPerUnit)}
+          ${field("Other income ($/mo)", "brrrr.otherIncome", b.otherIncome)}
+        </div>
+        <div class="kv"><span class="k">Total monthly rent</span><span class="v" id="rent-total">${fmtUSD(total)}</span></div>
+      ` : `
+        <div class="field mt">${field("Total monthly rent ($)", "brrrr.monthlyRent", b.monthlyRent)}</div>
+        <div class="kv"><span class="k">Used in analysis</span><span class="v" id="rent-total">${fmtUSD(effectiveRent(p))}</span></div>
+      `}
+    `;
+  }
+
+  // Renovation planner: line items feed the rehab cost unless a manual override is set.
+  function renoSection(p) {
+    const manual = p.rehabMode === "manual";
+    const total = renoTotal(p);
+    const rows = (p.renoItems || []).map((it, i) => `
+      <div class="reno-row">
+        <span class="reno-cat">${esc(it.category)}</span>
+        <input type="number" step="1" data-reno="${i}" data-renofield="cost" value="${it.cost == null ? "" : it.cost}" placeholder="0" />
+        <input type="text" data-reno="${i}" data-renofield="notes" value="${attr(it.notes)}" placeholder="notes" />
+      </div>`).join("");
+    return `
+      <div class="flex between wrap">
+        <label style="margin:0">Rehab source</label>
+        <div class="mode-toggle" data-rehabtoggle>
+          <button data-val="planner" class="${manual ? "" : "active"}">Planner total</button>
+          <button data-val="manual" class="${manual ? "active" : ""}">Manual override</button>
+        </div>
+      </div>
+      ${manual ? `
+        <div class="field mt">${field("Rehab costs — total ($)", "brrrr.rehabCosts", p.brrrr.rehabCosts)}</div>
+        <div class="hint">Planner total (${fmtUSD(total)}) is ignored while manual override is on.</div>
+      ` : `
+        <div class="reno-list mt">
+          <div class="reno-row reno-head"><span class="reno-cat">Item</span><span>Cost</span><span>Notes</span></div>
+          ${rows}
+        </div>
+        <div class="kv mt"><span class="k">Total renovation estimate</span><span class="v" id="reno-total">${fmtUSD(total)}</span></div>
+        <div class="hint">This total feeds the BRRRR rehab cost.</div>
+      `}
     `;
   }
 
@@ -1964,11 +2116,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     const opt = (val, label, arv) => `<button class="btn sm ${p.arvMode === val ? "primary" : ""}" data-arvmode="${val}" ${arv ? "" : "disabled"}>${label}${arv ? ` · ${fmtUSD(arv)}` : ""}</button>`;
     return `
       <div class="field-row three">
-        ${field("Manual ARV ($)", "brrrr.arv", b.arv)}
-        ${field("Refi LTV %", "brrrr.refinanceLTV", b.refinanceLTV, { step: "0.1" })}
-        ${field("Refi rate %", "brrrr.newInterestRate", b.newInterestRate, { step: "0.01" })}
+        ${field(p.propertyType === "multifamily" ? "Manual total ARV ($)" : "Manual ARV ($)", "brrrr.arv", b.arv)}
+        ${field("Refinance LTV %", "brrrr.refinanceLTV", b.refinanceLTV, { step: "0.1" })}
+        ${field("Refinance rate %", "brrrr.newInterestRate", b.newInterestRate, { step: "0.01" })}
       </div>
-      ${field("Refi term (yrs)", "brrrr.newLoanTerm", b.newLoanTerm)}
+      ${field("Loan term (yrs)", "brrrr.newLoanTerm", b.newLoanTerm)}
       <div class="divider"></div>
       <label>ARV source feeding the calculator</label>
       <div class="flex wrap" data-arvmodes>
@@ -1977,7 +2129,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         ${opt("expected", "Expected", range.expected)}
         ${opt("aggressive", "Aggressive", range.aggressive)}
       </div>
-      ${range.count > 0 ? `<div class="hint mt">Comp range from ${range.count} comp${range.count === 1 ? "" : "s"} · confidence ${range.confidence} · $${fmtInt(range.ppsfLow)}–$${fmtInt(range.ppsfHigh)}/sqft</div>` : `<div class="hint mt">Import more properties (ideally with a sold price + sqft) to unlock comp-based ARV — comps are drawn from your other properties.</div>`}
+      ${range.count > 0 ? `<div class="hint mt">Range from ${range.count} selected comp${range.count === 1 ? "" : "s"} · confidence ${range.confidence} · $${fmtInt(range.ppsfLow)}–$${fmtInt(range.ppsfHigh)}/sqft</div>` : `<div class="hint mt">Select comps in the “ARV &amp; comps” panel to unlock Conservative / Expected / Aggressive ARV.</div>`}
     `;
   }
 
@@ -2002,19 +2154,37 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           ${miniStat("Capital recovered", fmtPct(m.capitalRecoveryPct))}
         </div>
         <div class="mt">
-          <div class="kv"><span class="k">ARV used (${p.arvMode})</span><span class="v">${fmtUSD(m.arv)}</span></div>
+          <div class="kv"><span class="k">Total project cost</span><span class="v">${fmtUSD(r.totalProjectCost)}</span></div>
           <div class="kv"><span class="k">Cash invested</span><span class="v">${fmtUSD(r.cashInvested)}</span></div>
-          <div class="kv"><span class="k">Cash left in deal</span><span class="v">${fmtUSD(r.cashLeftInDeal)}</span></div>
-          <div class="kv"><span class="k">Cash out surplus</span><span class="v">${fmtUSD(r.cashOutSurplus)}</span></div>
-          <div class="kv"><span class="k">New mortgage</span><span class="v">${fmtUSD(r.newMonthlyPayment)}/mo</span></div>
           <div class="kv"><span class="k">Forced equity</span><span class="v">${fmtUSD(r.equityCreated)}</span></div>
+          <div class="kv"><span class="k">Monthly rent used</span><span class="v">${fmtUSD(m.inputs.monthlyRent)}/mo</span></div>
           <div class="kv"><span class="k">Break-even rent</span><span class="v">${fmtUSD(r.breakEvenRent)}</span></div>
         </div>`}
       </div>
+      ${m.hasDeal ? refinanceCard(p, m) : ""}
       ${m.hasDeal ? findingsCard(m.s) : ""}
       ${m.hasDeal ? compsCard(p) : ""}
       ${m.hasDeal ? sensitivityCard(m.inputs) : ""}
     `;
+  }
+
+  // Refinance-after-repair breakdown — applies to single-family and multifamily alike.
+  function refinanceCard(p, m) {
+    const r = m.r;
+    const inp = m.inputs;
+    return `<div class="card">
+      <h3>Refinance after repair <span class="muted">— ARV source: ${p.arvMode}</span></h3>
+      <div class="kv"><span class="k">After Repair Value</span><span class="v">${fmtUSD(m.arv)}</span></div>
+      <div class="kv"><span class="k">Refinance LTV</span><span class="v">${fmtPct(inp.refinanceLTV)}</span></div>
+      <div class="kv"><span class="k">Refinance interest rate</span><span class="v">${fmtPct(inp.newInterestRate, 2)}</span></div>
+      <div class="kv"><span class="k">Loan term</span><span class="v">${fmtInt(inp.newLoanTerm)} yrs</span></div>
+      <div class="kv"><span class="k">Refinance amount</span><span class="v">${fmtUSD(r.refinanceAmount)}</span></div>
+      <div class="kv"><span class="k">Original loan payoff</span><span class="v">${fmtUSD(r.originalLoanPayoff)}</span></div>
+      <div class="kv"><span class="k">Cash recovered</span><span class="v good">${fmtUSD(r.capitalRecovered)}</span></div>
+      <div class="kv"><span class="k">Cash left in deal</span><span class="v ${r.cashLeftInDeal > 0 ? "warn" : "good"}">${fmtUSD(r.cashLeftInDeal)}</span></div>
+      <div class="kv"><span class="k">Cash-out surplus</span><span class="v ${r.cashOutSurplus > 0 ? "good" : ""}">${fmtUSD(r.cashOutSurplus)}</span></div>
+      <div class="kv"><span class="k">New monthly mortgage</span><span class="v">${fmtUSD(r.newMonthlyPayment)}/mo</span></div>
+    </div>`;
   }
 
   function miniStat(k, v) { return `<div class="stat"><div class="k">${k}</div><div class="v" style="font-size:16px">${v}</div></div>`; }
@@ -2045,104 +2215,174 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     </div>`;
   }
 
+  /* -------------------------- comp selection UI ------------------------- */
+  let compFilterText = "", compFilterType = "all", compFilterMarket = "all";
+
+  function compFilterPass(x) {
+    if (compFilterType !== "all" && (x.c.propertyType || "single_family") !== compFilterType) return false;
+    if (compFilterMarket !== "all" && marketOf(x.c) !== compFilterMarket) return false;
+    if (compFilterText) {
+      const hay = [propTitle(x.c), x.c.address, x.c.city, x.c.zip, marketOf(x.c)].join(" ").toLowerCase();
+      if (hay.indexOf(compFilterText.toLowerCase()) === -1) return false;
+    }
+    return true;
+  }
+  function filteredCandidates(p) {
+    const selSet = new Set((p.compIds || []).filter((id) => getProperty(id)));
+    return compCandidates(p).filter((x) => !selSet.has(x.c.id) && compFilterPass(x)).slice(0, 40);
+  }
+  function pickerRowHtml(x) {
+    const c = x.c;
+    const sub = [marketOf(c), cityStateZip(c) || "—", propertyTypeLabel(c.propertyType) + (c.units > 1 ? " " + c.units + "u" : ""),
+      (c.beds == null ? "—" : c.beds) + "bd/" + (c.baths == null ? "—" : c.baths) + "ba", fmtInt(x.sqft) + " sqft",
+      (x.sold ? "sold " : "") + fmtUSD(x.value), x.condition].join(" · ");
+    return `<div class="picker-row">
+      <div class="picker-main"><div class="prop-name">${esc(propTitle(c))}</div><div class="prop-sub">${esc(sub)}</div></div>
+      <span class="pill">match ${x.score}</span>
+      <button class="btn sm primary" data-addcomp="${c.id}">Add</button>
+    </div>`;
+  }
+
   function compsCard(p) {
-    const sel = selectComps(p);
     const sqft = num(p.sqft);
     const range = computeArvRange(p);
-    const pool = sel.pool;
-    const excluded = p.excludedCompIds || [];
-    const otherCount = STATE.properties.length - 1;
+    const candidates = compCandidates(p);
+    const candCount = candidates.length;
+    const selectedIds = (p.compIds || []).filter((id) => getProperty(id));
+    const selected = selectedCompList(p); // sorted by implied value (low → high)
+    const n = selected.length;
+    const replaceOptions = (currentId) => candidates.map((o) =>
+      `<option value="${o.c.id}" ${o.c.id === currentId ? "selected" : ""}>${esc(propTitle(o.c))} · ${fmtUSD(o.value)} · match ${o.score}</option>`).join("");
 
-    // <option> list of every candidate property, for the Replace dropdown.
-    const optionsFor = (currentId) => pool.map((o) =>
-      `<option value="${o.c.id}" ${o.c.id === currentId ? "selected" : ""}>${esc(propTitle(o.c))} · ${fmtUSD(o.value)} · match ${o.score}</option>`
-    ).join("");
-
-    const card = (x, bracket) => {
-      if (!x) {
-        if (pool.length === 0) return `<div class="comp-card ${bracket} comp-empty"><span class="comp-tag">${bracket} comp</span><p class="faint mt" style="margin-bottom:0">No candidate.</p></div>`;
-        return `<div class="comp-card ${bracket} comp-empty">
-          <span class="comp-tag">${bracket} comp</span>
-          <p class="faint mt">No auto match for this bracket.</p>
-          <label class="comp-swap"><span>Pick a comp</span>
-            <select data-replacecomp="${bracket}"><option value="">Choose…</option>${optionsFor(null)}</select>
-          </label>
-        </div>`;
-      }
+    const selCard = (x, i) => {
       const c = x.c;
+      const bracket = n <= 1 ? "similar" : i === 0 ? "lower" : i === n - 1 ? "higher" : "similar";
+      const label = n <= 1 ? "comp" : bracket + " comp";
       return `<div class="comp-card ${bracket}">
-        <div class="flex between"><span class="comp-tag">${bracket} comp</span><span class="pill">${x.pinned ? "📌 kept" : "match " + x.score}</span></div>
+        <div class="flex between"><span class="comp-tag">${label}</span><span class="pill">match ${x.score}</span></div>
         <div class="prop-name mt">${esc(propTitle(c))}</div>
-        <div class="prop-sub">${esc(cityStateZip(c) || marketOf(c))}</div>
+        <div class="prop-sub">${esc(c.address || cityStateZip(c) || "—")}</div>
+        <div class="comp-facts mt">
+          <span class="pill">${esc(marketOf(c))}</span>
+          <span class="pill">${propertyTypeLabel(c.propertyType)}${c.units > 1 ? " · " + c.units + "u" : ""}</span>
+          <span class="badge ${renoBadgeClass(x.condition)}">${x.condition}</span>
+        </div>
         <div class="grid cols-2 mt">
-          ${miniStat(x.sold ? "Sold price" : "Value", fmtUSD(x.value))}
+          ${miniStat(x.sold ? "Sold price" : "List / value", fmtUSD(x.value))}
           ${miniStat("$/sqft", "$" + fmtInt(x.ppsf))}
         </div>
-        <div class="hint mt">${fmtInt(x.sqft)} sqft · ${c.beds == null ? "—" : c.beds}bd/${c.baths == null ? "—" : c.baths}ba · ${x.condition}${x.dist != null ? " · " + x.dist.toFixed(1) + " mi" : ""}${c.soldDate ? " · sold " + esc(c.soldDate) : ""}</div>
+        <div class="hint mt">${esc(cityStateZip(c) || "—")} · ${c.beds == null ? "—" : c.beds}bd/${c.baths == null ? "—" : c.baths}ba · ${fmtInt(x.sqft)} sqft${x.dist != null ? " · " + x.dist.toFixed(1) + " mi" : ""}${c.soldDate ? " · sold " + esc(c.soldDate) : ""}</div>
         ${sqft ? `<div class="hint">Implies ARV ≈ ${fmtUSD(x.impliedARV)}</div>` : ""}
-        <div class="comp-why">Why: ${esc(x.why.join(" · ") || "best available match")}</div>
-        <label class="comp-swap mt"><span>Replace</span>
-          <select data-replacecomp="${bracket}">${optionsFor(c.id)}</select>
-        </label>
+        <div class="comp-why">Why: ${esc(x.why.join(" · ") || "selected comp")}</div>
+        <label class="comp-swap mt"><span>Replace</span><select data-replacecomp="${c.id}">${replaceOptions(c.id)}</select></label>
         <div class="comp-actions mt">
-          <button class="btn sm ${x.pinned ? "primary" : ""}" data-pincomp="${bracket}" data-id="${c.id}">${x.pinned ? "✓ Kept" : "Keep"}</button>
-          <button class="btn sm danger" data-excludecomp="${c.id}">Remove</button>
-          ${c.listingLink ? `<a class="btn sm" href="${attr(c.listingLink)}" target="_blank" rel="noopener">Listing ↗</a>` : ""}
-          ${c.photosLink ? `<a class="btn sm" href="${attr(c.photosLink)}" target="_blank" rel="noopener">Photos ↗</a>` : ""}
+          <button class="btn sm danger" data-removecomp="${c.id}">Remove</button>
+          ${c.listingLink ? `<a class="btn sm" href="${attr(c.listingLink)}" target="_blank" rel="noopener">Link ↗</a>` : ""}
+          ${c.photosLink ? `<a class="btn sm" href="${attr(c.photosLink)}" target="_blank" rel="noopener">Photo ↗</a>` : ""}
           <button class="btn sm ghost" data-opencomp="${c.id}">Open</button>
         </div>
       </div>`;
     };
 
+    const marketOptions = ["all"].concat(Array.from(new Set(candidates.map((x) => marketOf(x.c)))))
+      .map((m) => `<option value="${attr(m)}" ${compFilterMarket === m ? "selected" : ""}>${m === "all" ? "All markets" : esc(m)}</option>`).join("");
+    const filtered = filteredCandidates(p);
+
     return `<div class="card" id="comps-card">
-      <h3>ARV &amp; comps <span class="muted">— ranked from your other ${otherCount} propert${otherCount === 1 ? "y" : "ies"}</span></h3>
-      ${!sqft ? `<p class="warn">Add the subject's square footage to compute comp-based ARV.</p>` : ""}
-      ${range.count > 0 ? `<div class="grid cols-3 mb">
-        ${stat("Conservative", fmtUSD(range.conservative), "lower comp")}
+      <div class="flex between wrap">
+        <h3 style="margin:0">ARV &amp; comps <span class="muted">— ${selectedIds.length} selected · ${candCount} available</span></h3>
+        ${candCount ? `<button class="btn sm" data-suggest3="1">✨ Suggest 3</button>` : ""}
+      </div>
+      ${!sqft ? `<p class="warn mt">Add the subject's square footage to compute comp-based ARV.</p>` : ""}
+      ${range.count > 0 ? `<div class="grid cols-3 mb mt">
+        ${stat("Conservative", fmtUSD(range.conservative), "lowest comp")}
         ${stat("Expected", fmtUSD(range.expected), "confidence " + range.confidence)}
-        ${stat("Aggressive", fmtUSD(range.aggressive), "higher comp")}
+        ${stat("Aggressive", fmtUSD(range.aggressive), "highest comp")}
       </div>` : ""}
-      <div class="comp-tag">Suggested comps (lower · similar · higher) — keep, replace, or remove each</div>
-      ${pool.length === 0
-        ? `<p class="faint mt">No comparable properties yet. <a href="#/analyze">Import more properties</a> (each comp needs a value + square footage) and they'll be ranked here.</p>`
-        : `<div class="grid cols-3 mt">${card(sel.lower, "lower")}${card(sel.similar, "similar")}${card(sel.higher, "higher")}</div>`}
-      ${excluded.length ? `<div class="hint mt"><button class="btn sm" data-clearexcluded="1">Reset ${excluded.length} removed comp${excluded.length === 1 ? "" : "s"}</button></div>` : ""}
+
+      <div class="comp-tag mt">Selected comps — only these drive the ARV</div>
+      ${n === 0
+        ? `<p class="faint mt">No comps selected. ${candCount ? `Use <strong>Suggest 3</strong> or add from your properties below.` : `<a href="#/import">Import more properties</a> (each comp needs a value + sqft) to choose comps.`}</p>`
+        : `<div class="grid cols-3 mt">${selected.map(selCard).join("")}</div>`}
+
+      ${candCount ? `
+      <div class="divider"></div>
+      <div class="comp-tag">Add comps from your properties</div>
+      <div class="comp-filters mt">
+        <input type="text" id="comp-search" placeholder="Search address, city, ZIP, market…" value="${attr(compFilterText)}" />
+        <select id="comp-type">
+          <option value="all" ${compFilterType === "all" ? "selected" : ""}>All types</option>
+          <option value="single_family" ${compFilterType === "single_family" ? "selected" : ""}>Single Family</option>
+          <option value="multifamily" ${compFilterType === "multifamily" ? "selected" : ""}>Multifamily</option>
+        </select>
+        <select id="comp-market">${marketOptions}</select>
+      </div>
+      <div class="picker-list mt" id="comp-picker-list">
+        ${filtered.length ? filtered.map(pickerRowHtml).join("") : `<p class="faint">No candidates match the filter.</p>`}
+      </div>` : ""}
     </div>`;
   }
 
-  function bindWorkspace(view, p) {
-    const recompute = () => {
-      const results = document.getElementById("ws-results");
-      if (results) results.innerHTML = workspaceResults(p);
-      bindResults(view, p);
-      const title = document.getElementById("ws-title");
-      const sub = document.getElementById("ws-sub");
-      if (title) title.textContent = propTitle(p);
-      if (sub) sub.textContent = cityStateZip(p) || "Add an address below";
-    };
+  /* ----------------------------- workspace binders ---------------------- */
+  function rerenderResults(view, p) {
+    const results = document.getElementById("ws-results");
+    if (results) { results.innerHTML = workspaceResults(p); bindResults(view, p); }
+  }
+  function rerenderComps(view, p) {
+    rerenderResults(view, p);
+    const arvCard = document.getElementById("arv-card");
+    if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
+  }
+  function refreshHeader(p) {
+    const title = document.getElementById("ws-title");
+    const sub = document.getElementById("ws-sub");
+    if (title) title.textContent = propTitle(p);
+    if (sub) sub.textContent = [propertyTypeLabel(p.propertyType), marketOf(p), cityStateZip(p)].filter(Boolean).join(" · ") || "Add an address below";
+  }
+  function refreshFormTotals(p) {
+    const rt = document.getElementById("rent-total");
+    if (rt) rt.textContent = p.brrrr.rentMode === "auto" ? fmtUSD(totalRentRoll(p)) : fmtUSD(effectiveRent(p));
+    const nt = document.getElementById("reno-total");
+    if (nt) nt.textContent = fmtUSD(renoTotal(p));
+  }
 
-    view.querySelectorAll("[data-field]").forEach((input) => {
-      const path = input.dataset.field;
-      input.addEventListener("input", () => {
-        let val = input.value;
-        if (NUMERIC_FIELDS.has(path) && input.type === "number") val = input.value === "" ? null : num(input.value);
-        setPath(p, path, val);
-        touch(p); saveState();
-        // Re-detect reno inline + refresh results.
-        if (path === "notes" || path === "description" || path === "renovationNotes") refreshRenoLine(p);
-        recompute();
-      });
+  // Shared [data-field] input binder.
+  function bindFieldInput(input, view, p) {
+    const path = input.dataset.field;
+    input.addEventListener("input", () => {
+      let val = input.value;
+      if (NUMERIC_FIELDS.has(path) && input.type === "number") val = input.value === "" ? null : num(input.value);
+      setPath(p, path, val);
+      touch(p); saveState();
+      if (path === "notes" || path === "description" || path === "renovationNotes") refreshRenoLine(p);
+      rerenderResults(view, p);
+      refreshHeader(p);
+      refreshFormTotals(p);
     });
+  }
 
+  function bindWorkspace(view, p) {
+    // Generic fields, except those owned by the self-re-rendering sub-cards.
+    view.querySelectorAll("[data-field]").forEach((input) => {
+      if (input.closest("#arv-card, #rent-block, #reno-card")) return;
+      bindFieldInput(input, view, p);
+    });
     view.querySelectorAll("[data-toggle]").forEach((tg) => {
       tg.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", () => {
         setPath(p, tg.dataset.toggle, btn.dataset.val);
         tg.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
-        touch(p); saveState(); recompute();
+        touch(p); saveState();
+        rerenderResults(view, p); refreshHeader(p);
+        // Property type can change MF labels in sub-cards.
+        rerenderRentBlock(view, p); rerenderRenoCard(view, p);
+        const arvCard = document.getElementById("arv-card");
+        if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
       }));
     });
-
+    bindArvCard(view, p);
+    bindRentBlock(view, p);
+    bindRenoCard(view, p);
     bindResults(view, p);
   }
 
@@ -2156,72 +2396,94 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       ${reno.matched.length ? `<span class="hint">matched: ${esc(reno.matched.join(", "))}</span>` : ""}`;
   }
 
-  // (Re)bind handlers that live inside the results column (ARV modes, comps).
+  function bindArvCard(view, p) {
+    const card = document.getElementById("arv-card");
+    if (!card) return;
+    card.querySelectorAll("[data-field]").forEach((input) => bindFieldInput(input, view, p));
+  }
+
+  function rerenderRentBlock(view, p) {
+    const block = document.getElementById("rent-block");
+    if (block) { block.innerHTML = rentSection(p); bindRentBlock(view, p); }
+  }
+  function bindRentBlock(view, p) {
+    const block = document.getElementById("rent-block");
+    if (!block) return;
+    block.querySelectorAll("[data-renttoggle] button").forEach((btn) => btn.addEventListener("click", () => {
+      p.brrrr.rentMode = btn.dataset.val === "auto" ? "auto" : "manual";
+      touch(p); saveState();
+      rerenderRentBlock(view, p); rerenderResults(view, p);
+    }));
+    block.querySelectorAll("[data-field]").forEach((input) => bindFieldInput(input, view, p));
+  }
+
+  function rerenderRenoCard(view, p) {
+    const card = document.getElementById("reno-card");
+    if (card) { card.innerHTML = renoSection(p); bindRenoCard(view, p); }
+  }
+  function bindRenoCard(view, p) {
+    const card = document.getElementById("reno-card");
+    if (!card) return;
+    card.querySelectorAll("[data-rehabtoggle] button").forEach((btn) => btn.addEventListener("click", () => {
+      p.rehabMode = btn.dataset.val === "manual" ? "manual" : "planner";
+      touch(p); saveState();
+      rerenderRenoCard(view, p); rerenderResults(view, p);
+    }));
+    card.querySelectorAll("[data-reno]").forEach((input) => input.addEventListener("input", () => {
+      const i = +input.dataset.reno, f = input.dataset.renofield;
+      if (!p.renoItems[i]) return;
+      p.renoItems[i][f] = f === "cost" ? (input.value === "" ? null : num(input.value)) : input.value;
+      touch(p); saveState();
+      const nt = document.getElementById("reno-total"); if (nt) nt.textContent = fmtUSD(renoTotal(p));
+      rerenderResults(view, p);
+    }));
+    card.querySelectorAll("[data-field]").forEach((input) => bindFieldInput(input, view, p));
+  }
+
+  function refreshPickerList(view, p) {
+    const list = document.getElementById("comp-picker-list");
+    if (!list) return;
+    const filtered = filteredCandidates(p);
+    list.innerHTML = filtered.length ? filtered.map(pickerRowHtml).join("") : `<p class="faint">No candidates match the filter.</p>`;
+    list.querySelectorAll("[data-addcomp]").forEach((b) => b.addEventListener("click", () => addComp(view, p, b.dataset.addcomp)));
+  }
+
+  function addComp(view, p, id) {
+    if (!getProperty(id)) return;
+    p.compIds = p.compIds || [];
+    if (p.compIds.indexOf(id) === -1) p.compIds.push(id);
+    touch(p); saveState(); rerenderComps(view, p);
+  }
+
+  // (Re)bind handlers inside the results column: ARV source + comp selection.
   function bindResults(view, p) {
     document.querySelectorAll("[data-arvmode]").forEach((b) => b.addEventListener("click", () => {
       if (b.disabled) return;
-      p.arvMode = b.dataset.arvmode; touch(p); saveState();
-      const results = document.getElementById("ws-results");
-      if (results) results.innerHTML = workspaceResults(p);
-      // also refresh the ARV source buttons in the form
-      const arvCard = document.getElementById("arv-card");
-      if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
-      bindResults(view, p);
+      p.arvMode = b.dataset.arvmode; touch(p); saveState(); rerenderComps(view, p);
     }));
-    const sels = () => (p.compSelections = p.compSelections || { lower: null, similar: null, higher: null });
-    // Keep — pin the current comp to its bracket (toggle off if already pinned).
-    document.querySelectorAll("[data-pincomp]").forEach((b) => b.addEventListener("click", () => {
-      const s = sels(), bracket = b.dataset.pincomp;
-      s[bracket] = s[bracket] === b.dataset.id ? null : b.dataset.id;
+    document.querySelectorAll("[data-suggest3]").forEach((b) => b.addEventListener("click", () => {
+      p.compIds = suggestThree(p).map((x) => x.c.id);
       touch(p); saveState(); rerenderComps(view, p);
     }));
-    // Replace — choose a different property for that bracket.
+    document.querySelectorAll("[data-addcomp]").forEach((b) => b.addEventListener("click", () => addComp(view, p, b.dataset.addcomp)));
+    document.querySelectorAll("[data-removecomp]").forEach((b) => b.addEventListener("click", () => {
+      p.compIds = (p.compIds || []).filter((id) => id !== b.dataset.removecomp);
+      touch(p); saveState(); rerenderComps(view, p);
+    }));
     document.querySelectorAll("[data-replacecomp]").forEach((box) => box.addEventListener("change", () => {
-      sels()[box.dataset.replacecomp] = box.value || null;
+      const oldId = box.dataset.replacecomp, newId = box.value;
+      if (!newId || newId === oldId) return;
+      p.compIds = (p.compIds || []).map((id) => (id === oldId ? newId : id)).filter((id, i, a) => a.indexOf(id) === i);
       touch(p); saveState(); rerenderComps(view, p);
     }));
-    // Remove — exclude from matching and drop any selection pointing at it.
-    document.querySelectorAll("[data-excludecomp]").forEach((b) => b.addEventListener("click", () => {
-      const id = b.dataset.excludecomp;
-      if (!p.excludedCompIds) p.excludedCompIds = [];
-      if (p.excludedCompIds.indexOf(id) === -1) p.excludedCompIds.push(id);
-      const s = sels();
-      for (const k of ["lower", "similar", "higher"]) if (s[k] === id) s[k] = null;
-      touch(p); saveState(); rerenderComps(view, p);
-    }));
-    document.querySelectorAll("[data-opencomp]").forEach((b) => b.addEventListener("click", () => navigate("property/" + b.dataset.id)));
-    document.querySelectorAll("[data-clearexcluded]").forEach((b) => b.addEventListener("click", () => {
-      p.excludedCompIds = []; touch(p); saveState(); rerenderComps(view, p);
-    }));
-  }
+    document.querySelectorAll("[data-opencomp]").forEach((b) => b.addEventListener("click", () => navigate("property/" + b.dataset.opencomp)));
 
-  function rerenderComps(view, p) {
-    const results = document.getElementById("ws-results");
-    if (results) results.innerHTML = workspaceResults(p);
-    const arvCard = document.getElementById("arv-card");
-    if (arvCard) { arvCard.innerHTML = arvSection(p); bindArvCard(view, p); }
-    bindResults(view, p);
-  }
-
-  function bindArvCard(view, p) {
-    const arvInput = document.querySelector('[data-field="brrrr.arv"]');
-    if (arvInput) arvInput.addEventListener("input", () => {
-      setPath(p, "brrrr.arv", arvInput.value === "" ? null : num(arvInput.value));
-      touch(p); saveState();
-      const results = document.getElementById("ws-results");
-      if (results) results.innerHTML = workspaceResults(p);
-      bindResults(view, p);
-    });
-    document.querySelectorAll('[data-field^="brrrr.refinanceLTV"],[data-field^="brrrr.newInterestRate"],[data-field^="brrrr.newLoanTerm"]').forEach((input) => {
-      input.addEventListener("input", () => {
-        const path = input.dataset.field;
-        setPath(p, path, input.value === "" ? null : num(input.value));
-        touch(p); saveState();
-        const results = document.getElementById("ws-results");
-        if (results) results.innerHTML = workspaceResults(p);
-        bindResults(view, p);
-      });
-    });
+    const search = document.getElementById("comp-search");
+    if (search) search.addEventListener("input", () => { compFilterText = search.value; refreshPickerList(view, p); });
+    const typeSel = document.getElementById("comp-type");
+    if (typeSel) typeSel.addEventListener("change", () => { compFilterType = typeSel.value; refreshPickerList(view, p); });
+    const mktSel = document.getElementById("comp-market");
+    if (mktSel) mktSel.addEventListener("change", () => { compFilterMarket = mktSel.value; refreshPickerList(view, p); });
   }
 
   /* ===================================================================== *
@@ -2589,22 +2851,32 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       p.propertyType = o.type || "single_family";
       p.brrrr = defaultBrrrr(o.price || 0, assumptionsForType(p.propertyType));
       if (o.rent != null) p.brrrr.monthlyRent = o.rent;
-      if (o.rehab != null) p.brrrr.rehabCosts = o.rehab;
+      if (o.rehab != null) {
+        p.brrrr.rehabCosts = o.rehab;
+        const other = p.renoItems.find((it) => it.category === "Other");
+        if (other) { other.cost = o.rehab; other.notes = "Estimate"; }
+      }
       if (o.arv != null) p.brrrr.arv = o.arv;
       if (o.soldPrice != null) { p.soldPrice = o.soldPrice; p.soldDate = o.soldDate || ""; p.listingStatus = "Sold"; }
       return p;
     };
-    const rows = [
+    const subjects = [
       mk({ top: { name: "Maple St Rental", address: "742 Maple St", beds: 3, baths: 2, sqft: 1450, lat: 33.6357, lng: -96.6089, listingStatus: "Active", description: "Fully renovated, new kitchen and new flooring throughout. Turnkey.", listingLink: "https://example.com/maple" }, price: 165000, rent: 1850, rehab: 25000, arv: 230000 }),
       mk({ top: { name: "Oak Ave Fixer", address: "318 Oak Ave", beds: 3, baths: 1, sqft: 1280, lat: 33.642, lng: -96.62, listingStatus: "Active", description: "Investor special, dated, needs work. Bring your contractor — value-add." }, price: 119000, rent: 1500, rehab: 45000 }),
-      mk({ type: "multifamily", top: { name: "Cedar Duplex", address: "55 Cedar St", units: 2, beds: 4, baths: 2, sqft: 2200, lat: 33.638, lng: -96.611, listingStatus: "Active", description: "Side-by-side duplex, both units updated, long-term tenants." }, price: 240000, rent: 2900, rehab: 20000 }),
-      // Recent sold comps — same list, auto-ranked as comps for the deals above.
+      mk({ type: "multifamily", top: { name: "Cedar Duplex", address: "55 Cedar St", units: 2, beds: 4, baths: 2, sqft: 2200, lat: 33.638, lng: -96.611, listingStatus: "Active", description: "Side-by-side duplex, both units updated, long-term tenants." }, price: 240000, rehab: 20000 }),
+    ];
+    // Showcase the per-unit rent roll on the multifamily deal.
+    subjects[2].brrrr.rentMode = "auto"; subjects[2].brrrr.rentPerUnit = 1450;
+    const comps = [
       mk({ top: { name: "905 Pine Rd", address: "905 Pine Rd", beds: 3, baths: 2, sqft: 1500, lat: 33.63, lng: -96.6, description: "Remodeled, updated throughout." }, soldPrice: 228000, soldDate: "2026-03-12" }),
       mk({ top: { name: "212 Elm St", address: "212 Elm St", beds: 3, baths: 2, sqft: 1380, lat: 33.628, lng: -96.615, description: "Original condition, dated." }, soldPrice: 199000, soldDate: "2026-02-02" }),
       mk({ top: { name: "640 Birch Ln", address: "640 Birch Ln", beds: 3, baths: 2, sqft: 1420, lat: 33.634, lng: -96.605, description: "Move-in ready, new paint and flooring." }, soldPrice: 215000, soldDate: "2026-04-01" }),
       mk({ type: "multifamily", top: { name: "88 Cedar Ct", address: "88 Cedar Ct", units: 2, beds: 4, baths: 2, sqft: 2150, lat: 33.639, lng: -96.612, description: "Updated duplex, both units renovated." }, soldPrice: 305000, soldDate: "2026-03-20" }),
     ];
+    const rows = subjects.concat(comps);
     for (let i = rows.length - 1; i >= 0; i--) STATE.properties.unshift(rows[i]);
+    // Pre-select suggested comps for the active deals so ARV ranges show immediately.
+    for (const s of subjects) s.compIds = suggestThree(s).map((x) => x.c.id);
   }
 
   /* ===================================================================== *

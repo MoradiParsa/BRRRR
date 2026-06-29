@@ -5,10 +5,12 @@ A **standalone, single-file, offline** real-estate analyzer for the BRRRR strate
 double-clicking — no server, no Node at runtime, no network calls, no accounts, and
 no paid APIs. All data stays in your browser's `localStorage`.
 
-CSV import is the main workflow: drop in **one master CSV** of properties and every deal
-is scored with an investment grade, cash-flow projection, ARV range, and sensitivity
-analysis. When you open a property, comps are drawn from the *other* properties on the
-same list — no second file to manage.
+It's a light, clean interface meant to feel like modern financial software. CSV import is
+the main workflow: drop in **one master CSV** of properties and every deal is scored with
+an investment grade, cash-flow projection, ARV range, and sensitivity analysis. Works for
+both single-family and multifamily (each multifamily deal is underwritten as one total
+property, with an optional per-unit rent roll). When you analyze a property, you **pick**
+which of your other properties to use as comps — no second file to manage.
 
 ## Run it
 
@@ -27,30 +29,35 @@ npm run build:local     # rebuild BRRRR_AI_Local.html from local-html/ source
 node local-html/serve.mjs   # serves the built file at http://localhost:3100
 ```
 
-The app has five screens: **Dashboard · Properties · Analyze · Compare · Settings**.
+The app has six screens: **Dashboard · Import · Properties · Analyze · Compare · Settings**.
 
 ## Using it
 
-1. **Analyze** — drop in one master CSV of properties. Column headers are matched
-   fuzzily, so most exports (MLS, Redfin, Zillow, spreadsheets) work as-is. Recognized
-   fields include address, city/state/zip, **market/submarket**, price, **list price**,
-   **sold price**, beds/baths/sqft, units, property type, rent, taxes, insurance, rehab,
-   ARV, lat/lng, listing & photo links, status, sold date, notes, description.
-   Unrecognized columns are preserved (not discarded). Property type (single-family vs
-   multifamily) is inferred from a `units` count and/or a `property type` column, and a
-   **market** is inferred from the city when the CSV doesn't supply one.
+1. **Import** — drop in one master CSV of properties (or add one by hand). Column headers
+   are matched fuzzily, so most exports (MLS, Redfin, Zillow, spreadsheets) work as-is.
+   Recognized fields include address, city/state/zip, **market/submarket**, price,
+   **list price**, **sold price**, beds/baths/sqft, units, property type, rent,
+   **rent per unit**, taxes, insurance, rehab estimate, ARV, listing & photo links, notes,
+   description, renovation notes, sold date, lat/lng. Unrecognized columns are preserved
+   (not discarded). Property type (single-family vs multifamily) is inferred from a `units`
+   count and/or a `property type` column, and a **market** is inferred from the city when
+   the CSV doesn't supply one. A pre-import step lets you confirm separate Single-Family
+   and Multifamily assumption profiles.
 
-2. **Confirm assumptions** before scoring — separate default profiles for
-   Single-Family and Multifamily (rehab, rent, ARV multiplier, rate, term, LTV,
-   management/vacancy/maintenance/capex/closing/holding %).
-
-3. **Properties** — every imported/added deal with its grade, condition, market, and
+2. **Properties** — every imported/added deal with its grade, condition, market, and
    cash flow, filterable by market (DFW, Houston, College Station, Austin, San Antonio,
-   or any custom label). Open one to see the full analysis page: subject details,
-   3-phase BRRRR calculator, an **ARV range**, a sensitivity table, and a **comps
-   selector** that ranks your other properties (same market, type, size, condition,
-   recency, distance) into a lower / similar / higher comp — each one you can keep,
-   replace, remove, or open.
+   or any custom label).
+
+3. **Analyze** — the per-property underwriting page (also reached by clicking any
+   property). It has the subject details, a 3-phase BRRRR calculator, a **Renovation
+   Planner** (line items by category that feed the rehab cost unless you override it),
+   a unit-level **rent roll** for multifamily (units × rent/unit + other income, or a
+   manual total), a clear **Refinance-after-repair** breakdown (ARV, LTV, rate, term,
+   refinance amount, original payoff, cash recovered, cash left in deal, cash-out surplus,
+   new monthly mortgage), a sensitivity table, and a **comps selector**: search/filter your
+   other properties and pick exactly which to use — only the comps you select drive the
+   Conservative / Expected / Aggressive ARV range. Optional lower / similar / higher
+   suggestions are one click away; keep, replace, or remove each.
 
 4. **Compare** — line up to four deals side by side.
 
